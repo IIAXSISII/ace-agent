@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "name": "Sync Docs on Source Change",
+  "description": "Watches Python source files (src/), CloudFormation templates (cloudformation/), and config files. When any change, prompts the agent to update README or /docs accordingly.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.py",
+      "cloudformation/**/*.yaml",
+      "cloudformation/**/*.json",
+      "docker-compose.yml",
+      "cloudformation/parameters/*.json",
+      "grafana/**/*.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source file was just edited. Review the change and determine if any documentation needs to be updated. If a README.md exists at the root, update the relevant section there. If a /docs folder exists, update the appropriate doc file inside it. Focus only on documentation that is directly affected by the change — don't rewrite unrelated sections."
+  },
+  "workspaceFolderName": "ace-agent",
+  "shortName": "sync-docs-on-source-change"
+}

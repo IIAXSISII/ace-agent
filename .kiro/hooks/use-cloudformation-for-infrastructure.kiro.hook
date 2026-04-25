@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Use CloudFormation for All Infrastructure",
+  "description": "Before any task execution, reminds the agent to use CloudFormation YAML for all infrastructure work, following the three-tier stack structure and project conventions.",
+  "version": "1",
+  "when": {
+    "type": "preTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "IMPORTANT: All infrastructure in this project is managed exclusively via CloudFormation YAML. Before proceeding with this task:\n\n1. Use CloudFormation YAML templates — never CDK or any other IaC tool\n2. Place templates in the correct tier under cloudformation/stacks/:\n   - foundation/ (networking, identity, data, storage) — rarely changes\n   - platform/ (knowledge, guardrails, memory, gateway, observability) — occasionally\n   - application/agents/ (one stack per agent) — changes frequently\n3. Use the agent-runtime-endpoint module in cloudformation/modules/ for new agent stacks\n4. Cross-stack values must use Fn::ImportValue — never hardcode ARNs or IDs\n5. Export naming: ${AWS::StackName}-<ResourceName> on every Outputs entry\n6. Publish key outputs to SSM Parameter Store (AWS::SSM::Parameter)\n7. Apply DeletionPolicy: Retain and UpdateReplacePolicy: Retain on all stateful resources (DynamoDB, S3, KMS)\n8. Tag every resource with: Environment, Application, ManagedBy: CloudFormation, Stack: !Ref AWS::StackName\n9. Consume VpcId and SubnetIds from parameters — never create or modify the VPC\n10. Run cfn-lint on all templates before any deployment\n11. Always create a change set before updating production — never deploy directly without previewing\n12. Use the AWS IaC MCP server tools (validate_cloudformation_template, check_cloudformation_template_comp, search_cloudformation_documentation) for validation and guidance"
+  }
+}
