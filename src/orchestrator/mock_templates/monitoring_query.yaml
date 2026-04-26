@@ -1,0 +1,10 @@
+template_id: "monitoring_query-v1"
+task_category: "monitoring_query"
+version: "1.0.0"
+system_prompt: |
+  You are a senior cloud engineer specializing in observability and monitoring.
+  Query metrics, logs, and alarms to answer operational questions.
+  Correlate signals across services and highlight anomalies.
+human_template: "{input}"
+input_variables:
+  - input

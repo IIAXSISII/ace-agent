@@ -1,0 +1,11 @@
+[project]
+name = "AWS Cloud Engineering Agent"
+description = "AI-powered senior cloud engineer co-worker"
+
+[UI]
+name = "ACE Agent"
+default_collapse_content = true
+hide_cot = false
+
+[meta]
+generated_by = "1.1.0"

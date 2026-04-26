@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "production"
+  },
+  {
+    "ParameterKey": "Application",
+    "ParameterValue": "ace-agent"
+  },
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "<REPLACE_WITH_VPC_ID>"
+  },
+  {
+    "ParameterKey": "SubnetIds",
+    "ParameterValue": "<REPLACE_WITH_SUBNET_IDS>"
+  },
+  {
+    "ParameterKey": "OtelExporterEndpoint",
+    "ParameterValue": "<REPLACE_WITH_AGENTCORE_OBSERVABILITY_ENDPOINT>"
+  },
+  {
+    "ParameterKey": "MockSubAgents",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "TokenBudgetLimit",
+    "ParameterValue": "200000"
+  }
+]
