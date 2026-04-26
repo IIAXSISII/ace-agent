@@ -16,6 +16,38 @@
     "ParameterValue": "<REPLACE_WITH_SUBNET_IDS>"
   },
   {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "<REPLACE_WITH_VPC_CIDR>"
+  },
+  {
+    "ParameterKey": "BedrockModelId",
+    "ParameterValue": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  },
+  {
+    "ParameterKey": "OrchestratorImageUri",
+    "ParameterValue": "<REPLACE_WITH_ECR_IMAGE_URI>"
+  },
+  {
+    "ParameterKey": "NetworkingStackName",
+    "ParameterValue": "ace-agent-foundation-networking-production"
+  },
+  {
+    "ParameterKey": "IdentityStackName",
+    "ParameterValue": "ace-agent-foundation-identity-production"
+  },
+  {
+    "ParameterKey": "GuardrailsStackName",
+    "ParameterValue": "ace-agent-platform-guardrails-production"
+  },
+  {
+    "ParameterKey": "MemoryStackName",
+    "ParameterValue": "ace-agent-platform-memory-production"
+  },
+  {
+    "ParameterKey": "GatewayStackName",
+    "ParameterValue": "ace-agent-platform-gateway-production"
+  },
+  {
     "ParameterKey": "OtelExporterEndpoint",
     "ParameterValue": "<REPLACE_WITH_AGENTCORE_OBSERVABILITY_ENDPOINT>"
   },

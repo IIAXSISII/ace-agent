@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Platform Gateway Stack.
+  Provisions the AgentCore Gateway with OAuth2 (JWT) authentication.
+  The GatewayUrl is passed to the Orchestrator container as AGENTCORE_GATEWAY_URL.
+  MCP tool registrations are placeholders in F02 — populated by F04+ when
+  real sub-agents are deployed.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - staging
+      - production
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+  OAuthDiscoveryUrl:
+    Type: String
+    Default: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_placeholder/.well-known/openid-configuration"
+    Description: >
+      OpenID Connect discovery URL for JWT token validation.
+      Must end with /.well-known/openid-configuration.
+      Replace with your IdP discovery URL (Cognito, Okta, Azure Entra ID, etc.).
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Gateway IAM Role ──────────────────────────────────────────────────────────
+  # Dedicated execution role for the AgentCore Gateway.
+  # Scoped to the minimum actions the gateway needs to invoke registered targets.
+  GatewayExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Application}-${Environment}-gateway-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GatewayPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeAgent
+                  - bedrock:InvokeModel
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:*"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── AgentCore Gateway ─────────────────────────────────────────────────────────
+  # MCP protocol gateway with OAuth2 (Custom JWT) authentication.
+  # AuthorizerType CUSTOM_JWT validates incoming Bearer tokens against the
+  # configured OpenID Connect discovery URL (Cognito / Okta / Azure Entra ID).
+  # cfn-lint W3001 justification: AWS::BedrockAgentCore::Gateway is a new
+  # resource type that may not yet be in the cfn-lint registry; the resource
+  # schema is valid per the CloudFormation Template Reference.
+  AgentCoreGateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    # cfn-lint: disable=W3001
+    Properties:
+      Name: !Sub "${Application}-${Environment}-gateway"
+      Description: !Sub >
+        ACE Agent MCP gateway for ${Environment}.
+        Provides unified connectivity between the Orchestrator and sub-agent tools.
+      ProtocolType: MCP
+      RoleArn: !GetAtt GatewayExecutionRole.Arn
+      AuthorizerType: CUSTOM_JWT
+      AuthorizerConfiguration:
+        CustomJWTAuthorizer:
+          DiscoveryUrl: !Ref OAuthDiscoveryUrl
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+        Stack: !Ref AWS::StackName
+
+  # ── SSM Parameters ────────────────────────────────────────────────────────────
+  GatewayEndpointUrlParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/gateway/endpoint-url"
+      Type: String
+      Value: !GetAtt AgentCoreGateway.GatewayUrl
+      Description: AgentCore Gateway URL — passed to Orchestrator as AGENTCORE_GATEWAY_URL
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GatewayIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/gateway/gateway-id"
+      Type: String
+      Value: !GetAtt AgentCoreGateway.GatewayIdentifier
+      Description: AgentCore Gateway identifier
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  GatewayEndpointUrl:
+    Description: >
+      AgentCore Gateway URL — passed to Orchestrator as AGENTCORE_GATEWAY_URL
+    Value: !GetAtt AgentCoreGateway.GatewayUrl
+    Export:
+      Name: !Sub "${AWS::StackName}-GatewayEndpointUrl"
+
+  GatewayId:
+    Description: AgentCore Gateway identifier
+    Value: !GetAtt AgentCoreGateway.GatewayIdentifier
+    Export:
+      Name: !Sub "${AWS::StackName}-GatewayId"

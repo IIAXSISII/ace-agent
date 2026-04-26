@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.2",
+    "langchain>=0.3",
     "langchain-aws>=0.2",
     "langchain-core>=0.3",
     "langgraph-checkpoint-aws>=0.1",
@@ -33,3 +34,6 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests that invoke external tools or subprocesses (e.g. cfn-lint)",
+]

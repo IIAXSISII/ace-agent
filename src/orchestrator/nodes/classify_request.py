@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import TYPE_CHECKING
 
+logger = logging.getLogger(__name__)
+
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.observability.langfuse import get_langfuse_handler
 
 if TYPE_CHECKING:
     from src.orchestrator.graph import OrchestratorState
@@ -45,7 +50,7 @@ def classify_request(state: "OrchestratorState") -> "OrchestratorState":
             HumanMessage(content=raw_request),
         ]
 
-        response = llm.invoke(messages)
+        response = llm.invoke(messages, config={"callbacks": [h for h in [get_langfuse_handler()] if h]})
         content = response.content if hasattr(response, "content") else str(response)
 
         # Strip markdown code fences if present
@@ -81,7 +86,8 @@ def classify_request(state: "OrchestratorState") -> "OrchestratorState":
         else:
             clarifying_question = None
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("classify_request LLM call failed: %s", exc)
         confidence_score = 0.0
         task_category = None
         entities = {}

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]" --system
+
+      - name: Run unit tests
+        env:
+          MOCK_STORAGE: "true"
+          MOCK_PROMPTS: "true"
+        run: uv run pytest tests/ --ignore=tests/integration -v --tb=short
+
+  cfn-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install cfn-lint
+        run: uv pip install cfn-lint --system
+
+      - name: Lint CloudFormation templates
+        run: cfn-lint cloudformation/stacks/**/*.yaml cloudformation/modules/**/*.yaml
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build orchestrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.orchestrator
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

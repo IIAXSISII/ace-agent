@@ -107,12 +107,12 @@
 
 1. THE Orchestrator SHALL emit structured logs for every request lifecycle event: request received, plan generated, step started, step completed, step failed, plan completed.
 2. THE Orchestrator SHALL emit ADOT traces for each request, mapping the full execution path across all nodes, including latency per node.
-3. THE repository SHALL include a `docker-compose.yml` at the repo root that starts: Chainlit UI (port 8000), ADOT Collector (port 4317), Langfuse (port 3000), Jaeger (port 16686), VictoriaMetrics (port 9090), and Grafana (port 3001).
+3. THE repository SHALL include a `docker-compose.yml` at the repo root that starts: Chainlit UI (port 8000), ADOT Collector (port 4317), Langfuse (port 3000), VictoriaTraces (port 9428), VictoriaMetrics (port 9091), and Grafana (port 3001).
 4. WHEN `OTEL_STACK=local`, THE Orchestrator SHALL wire the `langfuse.langchain.CallbackHandler` (imported from `langfuse.langchain`) into every LLM chain invocation via `config={"callbacks": [handler]}`.
 5. WHEN `OTEL_STACK` is not `local`, THE Langfuse handler SHALL NOT be wired — it is a local-only tool.
 6. THE ADOT `TracerProvider` SHALL be initialized with `AwsXRayIdGenerator()` from `opentelemetry.sdk.extension.aws.trace` from day one.
 7. THE ADOT exporter endpoint SHALL be configurable via `OTEL_EXPORTER_OTLP_ENDPOINT`; locally it points to `http://localhost:4317`.
-8. A developer SHALL be able to run `docker compose up -d` and immediately see agent traces in Jaeger and LLM traces in Langfuse without additional configuration.
+8. A developer SHALL be able to run `docker compose up -d` and immediately see agent traces in VictoriaTraces and LLM traces in Langfuse without additional configuration.
 9. THE Orchestrator SHALL expose a Prometheus-compatible `/metrics` endpoint for request volume, average execution time, step failure rate, and `confidence_score` distribution.
 
 ---

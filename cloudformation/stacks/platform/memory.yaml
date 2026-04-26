@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Platform Memory Stack.
+  Provisions two AgentCore Memory stores: a short-term store for session-scoped
+  multi-turn checkpointing (episodic strategy) and a long-term store for
+  cross-session semantic retrieval (semantic strategy).
+  ShortTermMemoryStoreId is passed to the Orchestrator as AGENTCORE_MEMORY_STORE_ID.
+  LongTermMemoryStoreId is passed as AGENTCORE_LONG_TERM_MEMORY_STORE_ID.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - staging
+      - production
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Short-Term Memory Store ───────────────────────────────────────────────────
+  # Session-scoped multi-turn checkpointing via episodic memory strategy.
+  # The Orchestrator reads AGENTCORE_MEMORY_STORE_ID to initialise
+  # AgentCoreMemorySaver in production (falls back to MemorySaver locally).
+  ShortTermMemoryStore:
+    Type: AWS::BedrockAgentCore::Memory
+    Properties:
+      # Name must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$ — no hyphens allowed.
+      # Environment values (local/staging/production) are alphanumeric, safe to embed directly.
+      Name: !Sub "AceAgent_${Environment}_ShortTerm"
+      Description: !Sub >
+        ACE Agent short-term memory for ${Environment}.
+        Session-scoped multi-turn checkpointing via episodic strategy.
+      EventExpiryDuration: 7
+      MemoryStrategies:
+        - EpisodicMemoryStrategy:
+            Name: ShortTermEpisodic
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+        Stack: !Ref AWS::StackName
+
+  # ── Long-Term Memory Store ────────────────────────────────────────────────────
+  # Cross-session semantic retrieval via semantic memory strategy.
+  # Passed to the Orchestrator as AGENTCORE_LONG_TERM_MEMORY_STORE_ID for
+  # future use by the retrieve_knowledge node.
+  LongTermMemoryStore:
+    Type: AWS::BedrockAgentCore::Memory
+    Properties:
+      # Name must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$ — no hyphens allowed.
+      Name: !Sub "AceAgent_${Environment}_LongTerm"
+      Description: !Sub >
+        ACE Agent long-term memory for ${Environment}.
+        Cross-session semantic retrieval via semantic strategy.
+      EventExpiryDuration: 365
+      MemoryStrategies:
+        - SemanticMemoryStrategy:
+            Name: LongTermSemantic
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+        Stack: !Ref AWS::StackName
+
+  # ── SSM Parameters ────────────────────────────────────────────────────────────
+  ShortTermMemoryStoreIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/memory/short-term-store-id"
+      Type: String
+      Value: !GetAtt ShortTermMemoryStore.MemoryId
+      Description: AgentCore Memory ID for the short-term (session-scoped) memory store
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  LongTermMemoryStoreIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/memory/long-term-store-id"
+      Type: String
+      Value: !GetAtt LongTermMemoryStore.MemoryId
+      Description: AgentCore Memory ID for the long-term (cross-session semantic) memory store
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  ShortTermMemoryStoreId:
+    Description: >
+      AgentCore Memory ID for the short-term store — passed to Orchestrator
+      as AGENTCORE_MEMORY_STORE_ID
+    Value: !GetAtt ShortTermMemoryStore.MemoryId
+    Export:
+      Name: !Sub "${AWS::StackName}-ShortTermMemoryStoreId"
+
+  LongTermMemoryStoreId:
+    Description: >
+      AgentCore Memory ID for the long-term store — passed to Orchestrator
+      as AGENTCORE_LONG_TERM_MEMORY_STORE_ID
+    Value: !GetAtt LongTermMemoryStore.MemoryId
+    Export:
+      Name: !Sub "${AWS::StackName}-LongTermMemoryStoreId"

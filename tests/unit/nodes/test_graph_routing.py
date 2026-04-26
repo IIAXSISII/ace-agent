@@ -173,19 +173,19 @@ class TestRouteDetectMissingInputs:
         assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_one_missing_input_routes_to_prompt_user(self):
-        """One missing input → 'prompt_user'"""
+        """In F01, always routes to generate_plan regardless of missing_inputs"""
         state = _base_state(missing_inputs=[
             {"name": "time_range", "description": "Time range", "type": "string", "example": "last 1h"}
         ])
-        assert _route_detect_missing_inputs(state) == "prompt_user"
+        assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_multiple_missing_inputs_routes_to_prompt_user(self):
-        """Multiple missing inputs → 'prompt_user'"""
+        """In F01, always routes to generate_plan"""
         state = _base_state(missing_inputs=[
             {"name": "service_name", "description": "Service", "type": "string", "example": "EC2"},
             {"name": "region", "description": "Region", "type": "string", "example": "us-east-1"},
         ])
-        assert _route_detect_missing_inputs(state) == "prompt_user"
+        assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_missing_key_defaults_to_generate_plan(self):
         """Absent missing_inputs key (falsy default) → 'generate_plan'"""
@@ -204,20 +204,20 @@ class TestRouteDetectMissingInputs:
 class TestRoutePresentPlan:
 
     def test_approved_routes_to_validate_step_pre(self):
-        """pending_approval=True (user approved) → 'validate_step_pre'"""
-        state = _base_state(pending_approval=True)
+        """pending_approval=False (auto-approved in F01) → 'validate_step_pre'"""
+        state = _base_state(pending_approval=False)
         assert _route_present_plan(state) == "validate_step_pre"
 
     def test_not_approved_routes_to_generate_plan(self):
-        """pending_approval=False (user modified / not yet approved) → 'generate_plan'"""
-        state = _base_state(pending_approval=False)
+        """pending_approval=True (user wants modification) → 'generate_plan'"""
+        state = _base_state(pending_approval=True)
         assert _route_present_plan(state) == "generate_plan"
 
     def test_missing_pending_approval_defaults_to_generate_plan(self):
-        """Absent pending_approval key defaults to False → 'generate_plan'"""
+        """Absent pending_approval defaults to False → auto-approved → 'validate_step_pre'"""
         state = _base_state()
         del state["pending_approval"]
-        assert _route_present_plan(state) == "generate_plan"
+        assert _route_present_plan(state) == "validate_step_pre"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

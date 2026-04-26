@@ -10,11 +10,8 @@ datasources:
     jsonData:
       timeInterval: "15s"
 
-  - name: Jaeger
+  - name: VictoriaTraces
     type: jaeger
-    uid: jaeger
-    url: http://jaeger:16686
+    uid: victoriatraces
+    url: http://victoriatraces:10428/select/jaeger
     access: proxy
-    jsonData:
-      tracesToLogsV2:
-        datasourceUid: victoriametrics

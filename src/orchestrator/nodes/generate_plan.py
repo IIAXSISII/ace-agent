@@ -5,7 +5,9 @@ import os
 from typing import TYPE_CHECKING
 
 from langchain_aws import ChatBedrock
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.observability.langfuse import get_langfuse_handler
 
 if TYPE_CHECKING:
     from src.orchestrator.graph import OrchestratorState
@@ -67,14 +69,14 @@ def generate_plan(state: "OrchestratorState") -> "OrchestratorState":
             indent=2,
         )
 
-        from langchain_core.messages import SystemMessage
-
         messages = [
             SystemMessage(content=system_content),
             HumanMessage(content=user_content),
         ]
 
-        response = llm.invoke(messages)
+        handler = get_langfuse_handler()
+        config = {"callbacks": [handler]} if handler else {}
+        response = llm.invoke(messages, config=config)
         content = response.content if hasattr(response, "content") else str(response)
 
         content = content.strip()

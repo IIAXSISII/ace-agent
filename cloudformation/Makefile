@@ -112,16 +112,15 @@ deploy-foundation:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # deploy-platform
-# Deploys all stacks under cloudformation/stacks/platform/
+# Deploys F02 platform stacks in order: guardrails → memory → gateway.
+# knowledge (F03) and observability (F05) are intentionally excluded here.
 # ──────────────────────────────────────────────────────────────────────────────
 .PHONY: deploy-platform
 deploy-platform:
-	$(call lint-templates,$(STACKS_DIR)/platform/*.yaml)
-	$(call deploy-stack,$(call stack-name,platform,knowledge),$(STACKS_DIR)/platform/knowledge.yaml)
+	$(call lint-templates,$(STACKS_DIR)/platform/guardrails.yaml $(STACKS_DIR)/platform/memory.yaml $(STACKS_DIR)/platform/gateway.yaml)
 	$(call deploy-stack,$(call stack-name,platform,guardrails),$(STACKS_DIR)/platform/guardrails.yaml)
 	$(call deploy-stack,$(call stack-name,platform,memory),$(STACKS_DIR)/platform/memory.yaml)
 	$(call deploy-stack,$(call stack-name,platform,gateway),$(STACKS_DIR)/platform/gateway.yaml)
-	$(call deploy-stack,$(call stack-name,platform,observability),$(STACKS_DIR)/platform/observability.yaml)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # deploy-agents

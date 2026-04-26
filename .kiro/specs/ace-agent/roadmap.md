@@ -54,7 +54,7 @@ Vision
 - Missing input detection and user prompting
 - Pre/post execution validation
 - Chainlit UI with real-time step streaming
-- `docker-compose.yml` local stack (Jaeger, Langfuse, VictoriaMetrics, Grafana)
+- `docker-compose.yml` local stack (VictoriaTraces, Langfuse, VictoriaMetrics, Grafana)
 - All correctness properties 1–23 testable locally
 
 **Done when:** A developer can `docker compose up -d` + `uvicorn src.orchestrator.main:app` and have a working agent that generates plans and validates steps, even with mock sub-agents. No AWS credentials required except for Bedrock API calls (LLM inference). AgentCore Memory is substituted with LangGraph `MemorySaver`; AgentCore Gateway is bypassed with direct tool calls.
@@ -186,7 +186,7 @@ These apply to every feature spec:
 | ARM64 containers | F01 | All containers built for ARM64 from day one |
 | `BaseTool` subclasses | F01 | No bare functions ever |
 | `langfuse.langchain.CallbackHandler` | F01 | Conditionally wired in `base.py` when `OTEL_STACK=local`; not active in production |
-| ADOT instrumentation | F01 | `AwsXRayIdGenerator` in `otel.py` from the start; local → Jaeger (traces) + VictoriaMetrics (metrics) |
+| ADOT instrumentation | F01 | `AwsXRayIdGenerator` in `otel.py` from the start; local → VictoriaTraces (traces) + VictoriaMetrics (metrics) |
 | CloudFormation `DeletionPolicy: Retain` | F02 | On all stateful resources |
 | `subagent-registry` pattern | F04 | Every integration follows the four-step checklist |
 | No hardcoded agent names in Orchestrator | F04 | Enforced by static analysis gate from F10 |

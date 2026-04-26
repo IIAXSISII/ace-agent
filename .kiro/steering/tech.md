@@ -50,10 +50,10 @@ inclusion: always
 | Tool | Role | Notes |
 |---|---|---|
 | ADOT (AWS Distro for OpenTelemetry) | Traces, metrics, logs | `AwsXRayIdGenerator` + `opentelemetry-propagator-aws-xray` |
-| Langfuse | LLM trace capture — **local dev only** (docker-compose) | SDK v3+; import from `langfuse.langchain` — **not** `langfuse.callback` |
+| Langfuse | LLM trace capture — **local dev only** (docker-compose) | v3 (requires ClickHouse, Redis, MinIO); SDK v3+; import from `langfuse.langchain` — **not** `langfuse.callback` |
 | VictoriaMetrics | Prometheus-compatible metrics backend — **local dev only** (docker-compose); replaces standalone Prometheus | |
 | Grafana | Unified dashboards — **local dev only** (docker-compose) | Port 3001 locally |
-| Jaeger | Distributed traces | Local dev only; port 16686 |
+| VictoriaTraces | Distributed traces — **local dev only** (docker-compose); Jaeger-compatible query API on port 9428 | Replaces Jaeger |
 | AWS X-Ray | Trace propagation | Production only; W3C TraceContext used locally |
 
 - `OTEL_STACK=local|production` — controls which ADOT Collector pipeline is active
@@ -112,7 +112,7 @@ These are hard rules — violations will break the system or violate security/co
 ## Common Commands
 
 ```bash
-# Start full local stack (ADOT, Jaeger, Langfuse, VictoriaMetrics, Grafana, Chainlit)
+# Start full local stack (ADOT, VictoriaTraces, Langfuse, VictoriaMetrics, Grafana, Chainlit)
 docker compose up -d
 
 # Run Orchestrator locally
@@ -159,8 +159,9 @@ export AWS_PROFILE=<your-profile>
 |---|---|
 | Chainlit UI | http://localhost:8000 |
 | Orchestrator API | http://localhost:8080 |
-| Jaeger | http://localhost:16686 |
+| VictoriaTraces | http://localhost:9428 |
 | Langfuse | http://localhost:3000 |
 | Grafana | http://localhost:3001 |
-| VictoriaMetrics | http://localhost:9090 |
+| VictoriaMetrics | http://localhost:9091 |
+| MinIO console | http://localhost:9090 |
 | ADOT Collector (gRPC) | localhost:4317 |

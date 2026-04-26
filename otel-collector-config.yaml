@@ -6,6 +6,16 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  # Scrape Prometheus metrics from the orchestrator /metrics endpoint
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: ace-orchestrator
+          scrape_interval: 15s
+          static_configs:
+            - targets: [orchestrator:8080]
+          metrics_path: /metrics
+
 processors:
   batch:
     timeout: 1s
@@ -16,8 +26,9 @@ processors:
     limit_mib: 512
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
+  # Forward traces to VictoriaTraces via OTLP HTTP
+  otlphttp/victoriatraces:
+    endpoint: http://victoriatraces:10428/insert/opentelemetry
     tls:
       insecure: true
 
@@ -26,20 +37,16 @@ exporters:
     tls:
       insecure: true
 
-  logging:
-    loglevel: warn
-
-propagators:
-  - tracecontext
-  - baggage
+  debug:
+    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger, logging]
+      exporters: [otlphttp/victoriatraces, debug]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, prometheus]
       processors: [memory_limiter, batch]
-      exporters: [prometheusremotewrite, logging]
+      exporters: [prometheusremotewrite, debug]

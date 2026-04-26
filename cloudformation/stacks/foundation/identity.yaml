@@ -1,0 +1,310 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Foundation Identity Stack.
+  Provisions the Orchestrator's dedicated KMS key, IAM execution role, and
+  Secrets Manager secret for external API credentials.
+
+  OWNERSHIP NOTE: This stack owns ONLY the Orchestrator execution role.
+  Sub-agent roles (F04+) are provisioned in their own agent stacks with
+  permissions scoped exclusively to the tools each sub-agent requires.
+  Roles are never shared across agents.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata
+# ──────────────────────────────────────────────────────────────────────────────
+Metadata:
+  StackOwnership: >
+    This stack owns only the OrchestratorExecutionRole. Sub-agent roles are
+    provisioned in their own stacks (cloudformation/stacks/application/agents/).
+    The agent-runtime-endpoint module accepts ExecutionRoleArn as a required
+    parameter — it never creates or shares a role internally.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - staging
+      - production
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── KMS Key for Secrets Manager encryption ───────────────────────────────────
+  OrchestratorKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "KMS key for ${Application}-${Environment} Orchestrator secrets"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRootAccountFullAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: AllowSecretsManagerUse
+            Effect: Allow
+            Principal:
+              Service: secretsmanager.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  OrchestratorKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Application}-${Environment}-orchestrator"
+      TargetKeyId: !Ref OrchestratorKmsKey
+
+  # ── Orchestrator IAM Execution Role ──────────────────────────────────────────
+  # Trust policy: bedrock-agentcore.amazonaws.com only — no cross-agent assumption.
+  # Inline policy: scoped to exactly the actions the Orchestrator requires.
+  # All resource ARNs are explicit — no wildcard resources.
+  OrchestratorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Application}-${Environment}-orchestrator-execution-role"
+      Description: >
+        Dedicated execution role for the ACE Agent Orchestrator.
+        Scoped to only the AWS actions the Orchestrator requires.
+        Sub-agent stacks provision their own roles - this role is never shared.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowAgentCoreRuntimeAssumption
+            Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: OrchestratorPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              # ── Bedrock: LLM invocation and guardrail checks ──────────────
+              - Sid: AllowBedrockInvoke
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:ApplyGuardrail
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*"
+
+              # ── DynamoDB: all 7 tables ────────────────────────────────────
+              - Sid: AllowDynamoDbTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-execution-logs"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-subagent-registry"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-prompt-template-registry"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-guardrail-violations"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-eval-run-results"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-human-review-queue"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-session-state"
+
+              # ── DynamoDB: GSI access on all 7 tables ──────────────────────
+              - Sid: AllowDynamoDbGsiAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-execution-logs/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-subagent-registry/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-prompt-template-registry/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-guardrail-violations/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-eval-run-results/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-human-review-queue/index/*"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Application}-${Environment}-session-state/index/*"
+
+              # ── S3: all 3 buckets ─────────────────────────────────────────
+              - Sid: AllowS3BucketAccess
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-golden-dataset-${AWS::AccountId}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-golden-dataset-${AWS::AccountId}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-eval-results-${AWS::AccountId}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-eval-results-${AWS::AccountId}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-artifacts-${AWS::AccountId}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${Application}-${Environment}-artifacts-${AWS::AccountId}/*"
+
+              # ── Secrets Manager: external API credentials ─────────────────
+              - Sid: AllowSecretsManagerAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Application}-${Environment}-external-api-credentials-*"
+
+              # ── X-Ray: distributed tracing ────────────────────────────────
+              - Sid: AllowXRayTracing
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: !Sub "arn:${AWS::Partition}:xray:${AWS::Region}:${AWS::AccountId}:*"
+
+              # ── CloudWatch Logs: container log output ─────────────────────
+              - Sid: AllowCloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/${Application}-${Environment}-orchestrator*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/${Application}-${Environment}-orchestrator*:log-stream:*"
+
+              # ── KMS: decrypt secrets and DynamoDB data ────────────────────
+              - Sid: AllowKmsDecrypt
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  - !GetAtt OrchestratorKmsKey.Arn
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── External API Credentials Secret ──────────────────────────────────────────
+  # Placeholder secret for external API credentials (populated by F04+ integrations).
+  # Encrypted with the Orchestrator KMS key. Retained on stack deletion.
+  ExternalApiCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub "${Application}-${Environment}-external-api-credentials"
+      Description: >
+        External API credentials for the ACE Agent Orchestrator.
+        Populated by F04+ sub-agent integrations (Confluence, GitHub, etc.).
+      KmsKeyId: !Ref OrchestratorKmsKey
+      SecretString: '{"placeholder": "Replace with actual credentials in F04+"}'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── SSM Parameters ────────────────────────────────────────────────────────────
+  OrchestratorKmsKeyArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/identity/orchestrator-kms-key-arn"
+      Type: String
+      Value: !GetAtt OrchestratorKmsKey.Arn
+      Description: KMS key ARN for Orchestrator secrets encryption
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  OrchestratorExecutionRoleArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/identity/orchestrator-execution-role-arn"
+      Type: String
+      Value: !GetAtt OrchestratorExecutionRole.Arn
+      Description: IAM execution role ARN for the Orchestrator AgentCore Runtime
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  ExternalApiCredentialsSecretArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/identity/external-api-credentials-secret-arn"
+      Type: String
+      Value: !Ref ExternalApiCredentialsSecret
+      Description: Secrets Manager ARN for external API credentials
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  OrchestratorKmsKeyArn:
+    Description: ARN of the KMS key used for Orchestrator secrets encryption
+    Value: !GetAtt OrchestratorKmsKey.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-OrchestratorKmsKeyArn"
+
+  OrchestratorKmsKeyId:
+    Description: ID of the KMS key used for Orchestrator secrets encryption
+    Value: !Ref OrchestratorKmsKey
+    Export:
+      Name: !Sub "${AWS::StackName}-OrchestratorKmsKeyId"
+
+  OrchestratorExecutionRoleArn:
+    Description: >
+      ARN of the Orchestrator's dedicated IAM execution role.
+      Consumed by orchestrator.yaml via Fn::ImportValue.
+      Must NOT be referenced by any sub-agent stack.
+    Value: !GetAtt OrchestratorExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-OrchestratorExecutionRoleArn"
+
+  OrchestratorExecutionRoleName:
+    Description: Name of the Orchestrator IAM execution role
+    Value: !Ref OrchestratorExecutionRole
+    Export:
+      Name: !Sub "${AWS::StackName}-OrchestratorExecutionRoleName"
+
+  ExternalApiCredentialsSecretArn:
+    Description: ARN of the Secrets Manager secret for external API credentials
+    Value: !Ref ExternalApiCredentialsSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-ExternalApiCredentialsSecretArn"

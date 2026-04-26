@@ -10,10 +10,12 @@ def present_plan(state: "OrchestratorState") -> "OrchestratorState":
     """
     Signal that the execution plan is ready for user review.
 
-    Sets pending_approval = True so the graph routing function (_route_present_plan)
-    can detect that the plan has been presented. In the full Chainlit integration,
-    the graph is interrupted here via LangGraph's interrupt mechanism and the UI
-    renders the plan for user approval. For local testing, _route_present_plan
-    routes directly to validate_step_pre when pending_approval is True.
+    In F01 (no real interrupt mechanism), auto-approves the plan so execution
+    proceeds immediately. Sets pending_approval = False so _route_present_plan
+    routes to validate_step_pre exactly once and does not loop back to generate_plan.
+
+    In a future feature with LangGraph interrupt support, this node would set
+    pending_approval = True and yield control to the Chainlit UI for explicit
+    user confirmation before resuming.
     """
-    return {**state, "pending_approval": True}
+    return {**state, "pending_approval": False}

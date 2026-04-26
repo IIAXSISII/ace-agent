@@ -527,7 +527,7 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state(pending_approval=False)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_pending_approval_already_false_before_call(self):
         # Property 8: before present_plan runs, pending_approval is False
@@ -535,14 +535,14 @@ class TestPresentPlan:
         state = _base_state(pending_approval=False)
         assert state["pending_approval"] is False
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_idempotent_when_already_true(self):
         # Property 8: calling present_plan when already approved keeps it True
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state(pending_approval=True)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_state_fields_preserved(self):
         # present_plan must not drop any state fields
@@ -572,4 +572,4 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state()
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
