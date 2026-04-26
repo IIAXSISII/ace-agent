@@ -1,0 +1,599 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Foundation Data Stack.
+  Provisions all 7 DynamoDB tables with on-demand billing, PITR, KMS encryption,
+  TTL, DynamoDB Streams, and GSIs. All tables are tagged and retained on deletion.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - staging
+      - production
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── 1. execution-logs ───────────────────────────────────────────────────────
+  ExecutionLogsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-execution-logs"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: DISABLED
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      AttributeDefinitions:
+        - AttributeName: requestId
+          AttributeType: S
+        - AttributeName: stepTimestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestId
+          KeyType: HASH
+        - AttributeName: stepTimestamp
+          KeyType: RANGE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 2. subagent-registry ────────────────────────────────────────────────────
+  SubagentRegistryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-subagent-registry"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: category-index
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+            - AttributeName: agentId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 3. prompt-template-registry ─────────────────────────────────────────────
+  PromptTemplateRegistryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-prompt-template-registry"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: taskCategory
+          AttributeType: S
+        - AttributeName: version
+          AttributeType: S
+      KeySchema:
+        - AttributeName: taskCategory
+          KeyType: HASH
+        - AttributeName: version
+          KeyType: RANGE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 4. guardrail-violations ─────────────────────────────────────────────────
+  GuardrailViolationsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-guardrail-violations"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      AttributeDefinitions:
+        - AttributeName: violationId
+          AttributeType: S
+        - AttributeName: violationType
+          AttributeType: S
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: violationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: violationType-index
+          KeySchema:
+            - AttributeName: violationType
+              KeyType: HASH
+            - AttributeName: violationId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: requestId-index
+          KeySchema:
+            - AttributeName: requestId
+              KeyType: HASH
+            - AttributeName: violationId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 5. eval-run-results ─────────────────────────────────────────────────────
+  EvalRunResultsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-eval-run-results"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: runId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: taskCategory
+          AttributeType: S
+      KeySchema:
+        - AttributeName: runId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: taskCategory-timestamp-index
+          KeySchema:
+            - AttributeName: taskCategory
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 6. human-review-queue ───────────────────────────────────────────────────
+  HumanReviewQueueTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-human-review-queue"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: requestId
+          AttributeType: S
+        - AttributeName: reviewStatus
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: reviewStatus-createdAt-index
+          KeySchema:
+            - AttributeName: reviewStatus
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── 7. session-state ────────────────────────────────────────────────────────
+  SessionStateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Application}-${Environment}-session-state"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: updatedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-updatedAt-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: updatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── SSM Parameters ───────────────────────────────────────────────────────────
+  ExecutionLogsTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/execution-logs/table-name"
+      Type: String
+      Value: !Ref ExecutionLogsTable
+      Description: DynamoDB table name for execution-logs
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  ExecutionLogsTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/execution-logs/table-arn"
+      Type: String
+      Value: !GetAtt ExecutionLogsTable.Arn
+      Description: DynamoDB table ARN for execution-logs
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  SubagentRegistryTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/subagent-registry/table-name"
+      Type: String
+      Value: !Ref SubagentRegistryTable
+      Description: DynamoDB table name for subagent-registry
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  SubagentRegistryTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/subagent-registry/table-arn"
+      Type: String
+      Value: !GetAtt SubagentRegistryTable.Arn
+      Description: DynamoDB table ARN for subagent-registry
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  PromptTemplateRegistryTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/prompt-template-registry/table-name"
+      Type: String
+      Value: !Ref PromptTemplateRegistryTable
+      Description: DynamoDB table name for prompt-template-registry
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  PromptTemplateRegistryTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/prompt-template-registry/table-arn"
+      Type: String
+      Value: !GetAtt PromptTemplateRegistryTable.Arn
+      Description: DynamoDB table ARN for prompt-template-registry
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GuardrailViolationsTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/guardrail-violations/table-name"
+      Type: String
+      Value: !Ref GuardrailViolationsTable
+      Description: DynamoDB table name for guardrail-violations
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GuardrailViolationsTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/guardrail-violations/table-arn"
+      Type: String
+      Value: !GetAtt GuardrailViolationsTable.Arn
+      Description: DynamoDB table ARN for guardrail-violations
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  EvalRunResultsTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/eval-run-results/table-name"
+      Type: String
+      Value: !Ref EvalRunResultsTable
+      Description: DynamoDB table name for eval-run-results
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  EvalRunResultsTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/eval-run-results/table-arn"
+      Type: String
+      Value: !GetAtt EvalRunResultsTable.Arn
+      Description: DynamoDB table ARN for eval-run-results
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  HumanReviewQueueTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/human-review-queue/table-name"
+      Type: String
+      Value: !Ref HumanReviewQueueTable
+      Description: DynamoDB table name for human-review-queue
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  HumanReviewQueueTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/human-review-queue/table-arn"
+      Type: String
+      Value: !GetAtt HumanReviewQueueTable.Arn
+      Description: DynamoDB table ARN for human-review-queue
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  SessionStateTableNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/session-state/table-name"
+      Type: String
+      Value: !Ref SessionStateTable
+      Description: DynamoDB table name for session-state
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  SessionStateTableArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/dynamodb/session-state/table-arn"
+      Type: String
+      Value: !GetAtt SessionStateTable.Arn
+      Description: DynamoDB table ARN for session-state
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  # execution-logs
+  ExecutionLogsTableArn:
+    Description: ARN of the execution-logs DynamoDB table
+    Value: !GetAtt ExecutionLogsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ExecutionLogsTableArn"
+
+  ExecutionLogsTableName:
+    Description: Name of the execution-logs DynamoDB table
+    Value: !Ref ExecutionLogsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-ExecutionLogsTableName"
+
+  # subagent-registry
+  SubagentRegistryTableArn:
+    Description: ARN of the subagent-registry DynamoDB table
+    Value: !GetAtt SubagentRegistryTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SubagentRegistryTableArn"
+
+  SubagentRegistryTableName:
+    Description: Name of the subagent-registry DynamoDB table
+    Value: !Ref SubagentRegistryTable
+    Export:
+      Name: !Sub "${AWS::StackName}-SubagentRegistryTableName"
+
+  # prompt-template-registry
+  PromptTemplateRegistryTableArn:
+    Description: ARN of the prompt-template-registry DynamoDB table
+    Value: !GetAtt PromptTemplateRegistryTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-PromptTemplateRegistryTableArn"
+
+  PromptTemplateRegistryTableName:
+    Description: Name of the prompt-template-registry DynamoDB table
+    Value: !Ref PromptTemplateRegistryTable
+    Export:
+      Name: !Sub "${AWS::StackName}-PromptTemplateRegistryTableName"
+
+  # guardrail-violations
+  GuardrailViolationsTableArn:
+    Description: ARN of the guardrail-violations DynamoDB table
+    Value: !GetAtt GuardrailViolationsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-GuardrailViolationsTableArn"
+
+  GuardrailViolationsTableName:
+    Description: Name of the guardrail-violations DynamoDB table
+    Value: !Ref GuardrailViolationsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-GuardrailViolationsTableName"
+
+  # eval-run-results
+  EvalRunResultsTableArn:
+    Description: ARN of the eval-run-results DynamoDB table
+    Value: !GetAtt EvalRunResultsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalRunResultsTableArn"
+
+  EvalRunResultsTableName:
+    Description: Name of the eval-run-results DynamoDB table
+    Value: !Ref EvalRunResultsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalRunResultsTableName"
+
+  EvalRunResultsStreamArn:
+    Description: Stream ARN of the eval-run-results DynamoDB table
+    Value: !GetAtt EvalRunResultsTable.StreamArn
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalRunResultsStreamArn"
+
+  # human-review-queue
+  HumanReviewQueueTableArn:
+    Description: ARN of the human-review-queue DynamoDB table
+    Value: !GetAtt HumanReviewQueueTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-HumanReviewQueueTableArn"
+
+  HumanReviewQueueTableName:
+    Description: Name of the human-review-queue DynamoDB table
+    Value: !Ref HumanReviewQueueTable
+    Export:
+      Name: !Sub "${AWS::StackName}-HumanReviewQueueTableName"
+
+  # session-state
+  SessionStateTableArn:
+    Description: ARN of the session-state DynamoDB table
+    Value: !GetAtt SessionStateTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SessionStateTableArn"
+
+  SessionStateTableName:
+    Description: Name of the session-state DynamoDB table
+    Value: !Ref SessionStateTable
+    Export:
+      Name: !Sub "${AWS::StackName}-SessionStateTableName"

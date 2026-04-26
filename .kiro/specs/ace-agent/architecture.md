@@ -35,12 +35,12 @@ graph TB
 
     subgraph AgentCore["Amazon Bedrock AgentCore Runtime (Firecracker VM Isolation)"]
         ORCH[Orchestrator Agent<br/>LangGraph + Claude]
-        subgraph SubAgents["Sub-Agents (N) — registry-driven, extensible"]
+        subgraph SubAgents["Sub-Agents — registry-driven, extensible"]
             CA[Confluence_Agent<br/>knowledge_documentation]
             CWA[CloudWatch_Agent<br/>observability_monitoring]
             VMA[VictoriaMetrics_Agent<br/>observability_monitoring]
             GHA[GitHub_Agent<br/>source_control_cicd]
-            DOTS[... any future agent<br/>registered in subagent-registry]
+            DOTS[future agents<br/>registered in subagent-registry]
         end
     end
 
@@ -79,10 +79,10 @@ graph TB
         ACOBS[AgentCore Observability<br/>CloudWatch-powered — all features enabled]
         OTEL[ADOT Collector]
         XRAY[AWS X-Ray]
-        LF[Langfuse<br/>(local docker-compose only)]
-        VMOBS[VictoriaMetrics<br/>(local docker-compose only)]
-        GRAF[Grafana<br/>(local docker-compose only)]
-        JAEGER[Jaeger<br/>(local docker-compose only)]
+        LF[Langfuse - local docker-compose only]
+        VMOBS[VictoriaMetrics - local docker-compose only]
+        GRAF[Grafana - local docker-compose only]
+        JAEGER[Jaeger - local docker-compose only]
     end
 
     subgraph Identity["AgentCore Identity"]
@@ -899,9 +899,9 @@ flowchart TD
         GRAF[Grafana Dashboard]
     end
 
-    MC --> Offline
-    PC --> Offline
-    SCHED --> Offline
+    MC --> RUN
+    PC --> RUN
+    SCHED --> RUN
     GD --> RUN
     RUN --> SCORE
     SCORE --> COMPARE

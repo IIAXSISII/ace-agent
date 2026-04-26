@@ -1,0 +1,670 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Foundation Storage Stack.
+  Provisions all 3 S3 buckets (golden-dataset, eval-results, artifacts) with KMS
+  encryption, public access blocked, VPC-only bucket policies, S3 Versioning on
+  golden-dataset, a Glue Data Catalog database and table over eval-results
+  (partitioned by year/month/taskCategory), and an Athena workgroup.
+  All buckets are retained on deletion.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - staging
+      - production
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+  VpcId:
+    Type: String
+    Description: >
+      VPC ID whose endpoints are allowed to access the S3 buckets.
+      Must be provided for all environments — never hardcoded.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── KMS key shared by all 3 buckets ─────────────────────────────────────────
+  StorageKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "KMS key for ${Application}-${Environment} S3 storage buckets"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRootAccountFullAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: AllowS3ServiceUse
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+          - Sid: AllowGlueServiceUse
+            Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+          - Sid: AllowAthenaServiceUse
+            Effect: Allow
+            Principal:
+              Service: athena.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  StorageKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Application}-${Environment}-storage"
+      TargetKeyId: !Ref StorageKmsKey
+
+  # ── 1. golden-dataset bucket ─────────────────────────────────────────────────
+  GoldenDatasetBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Application}-${Environment}-golden-dataset-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StorageKmsKey.Arn
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  GoldenDatasetBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GoldenDatasetBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonVpcAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt GoldenDatasetBucket.Arn
+              - !Sub "${GoldenDatasetBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                "aws:SourceVpc": !Ref VpcId
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt GoldenDatasetBucket.Arn
+              - !Sub "${GoldenDatasetBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # ── 2. eval-results bucket ───────────────────────────────────────────────────
+  EvalResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Application}-${Environment}-eval-results-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StorageKmsKey.Arn
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  EvalResultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref EvalResultsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonVpcAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt EvalResultsBucket.Arn
+              - !Sub "${EvalResultsBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                "aws:SourceVpc": !Ref VpcId
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt EvalResultsBucket.Arn
+              - !Sub "${EvalResultsBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+          - Sid: AllowGlueReadAccess
+            Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt EvalResultsBucket.Arn
+              - !Sub "${EvalResultsBucket.Arn}/*"
+          - Sid: AllowAthenaQueryAccess
+            Effect: Allow
+            Principal:
+              Service: athena.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt EvalResultsBucket.Arn
+              - !Sub "${EvalResultsBucket.Arn}/*"
+
+  # ── 3. artifacts bucket ──────────────────────────────────────────────────────
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Application}-${Environment}-artifacts-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StorageKmsKey.Arn
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  ArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonVpcAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ArtifactsBucket.Arn
+              - !Sub "${ArtifactsBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                "aws:SourceVpc": !Ref VpcId
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ArtifactsBucket.Arn
+              - !Sub "${ArtifactsBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # ── Athena query-results bucket (required by Athena workgroup) ───────────────
+  AthenaResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Application}-${Environment}-athena-results-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StorageKmsKey.Arn
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireQueryResults
+            Status: Enabled
+            ExpirationInDays: 30
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  AthenaResultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AthenaResultsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonVpcAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt AthenaResultsBucket.Arn
+              - !Sub "${AthenaResultsBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                "aws:SourceVpc": !Ref VpcId
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt AthenaResultsBucket.Arn
+              - !Sub "${AthenaResultsBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+          - Sid: AllowAthenaWrite
+            Effect: Allow
+            Principal:
+              Service: athena.amazonaws.com
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt AthenaResultsBucket.Arn
+              - !Sub "${AthenaResultsBucket.Arn}/*"
+
+  # ── Glue Data Catalog database ───────────────────────────────────────────────
+  EvalResultsGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub "${Application}_${Environment}_eval_results"
+        Description: !Sub "Glue database for ${Application} ${Environment} eval-results analytics"
+
+  # ── Glue Data Catalog table (partitioned by year/month/taskCategory) ─────────
+  EvalResultsGlueTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref EvalResultsGlueDatabase
+      TableInput:
+        Name: eval_results
+        Description: Eval run results partitioned by year, month, and taskCategory
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: json
+          compressionType: none
+          typeOfData: file
+        StorageDescriptor:
+          Location: !Sub "s3://${EvalResultsBucket}/eval-results/"
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+            Parameters:
+              serialization.format: "1"
+          Columns:
+            - Name: run_id
+              Type: string
+              Comment: Unique identifier for the eval run
+            - Name: timestamp
+              Type: string
+              Comment: ISO-8601 timestamp of the eval run
+            - Name: task_category
+              Type: string
+              Comment: One of the 7 task categories
+            - Name: faithfulness
+              Type: double
+              Comment: RAGAS faithfulness score (0.0-1.0)
+            - Name: answer_relevance
+              Type: double
+              Comment: RAGAS answer relevance score (0.0-1.0)
+            - Name: context_precision
+              Type: double
+              Comment: RAGAS context precision score (0.0-1.0)
+            - Name: context_recall
+              Type: double
+              Comment: RAGAS context recall score (0.0-1.0)
+            - Name: confidence_score
+              Type: double
+              Comment: Orchestrator final confidence score
+            - Name: hop_count
+              Type: int
+              Comment: Number of sub-agent hops in the execution
+            - Name: token_count
+              Type: int
+              Comment: Total tokens consumed across all LLM calls
+            - Name: step_count
+              Type: int
+              Comment: Number of plan steps executed
+            - Name: error_message
+              Type: string
+              Comment: Error message if the run failed, null otherwise
+        PartitionKeys:
+          - Name: year
+            Type: string
+            Comment: Partition year (YYYY)
+          - Name: month
+            Type: string
+            Comment: Partition month (MM)
+          - Name: task_category
+            Type: string
+            Comment: Partition task category
+
+  # ── Athena workgroup ─────────────────────────────────────────────────────────
+  EvalResultsAthenaWorkgroup:
+    Type: AWS::Athena::WorkGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub "${Application}-${Environment}-eval-analytics"
+      Description: !Sub "Athena workgroup for ${Application} ${Environment} eval-results ad-hoc analytics"
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        ResultConfiguration:
+          OutputLocation: !Sub "s3://${AthenaResultsBucket}/athena-query-results/"
+          EncryptionConfiguration:
+            EncryptionOption: SSE_KMS
+            KmsKey: !GetAtt StorageKmsKey.Arn
+        EngineVersion:
+          SelectedEngineVersion: "Athena engine version 3"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── SSM Parameters ───────────────────────────────────────────────────────────
+  StorageKmsKeyArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/storage/kms-key-arn"
+      Type: String
+      Value: !GetAtt StorageKmsKey.Arn
+      Description: KMS key ARN for storage buckets
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GoldenDatasetBucketNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/golden-dataset/bucket-name"
+      Type: String
+      Value: !Ref GoldenDatasetBucket
+      Description: S3 bucket name for golden-dataset
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GoldenDatasetBucketArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/golden-dataset/bucket-arn"
+      Type: String
+      Value: !GetAtt GoldenDatasetBucket.Arn
+      Description: S3 bucket ARN for golden-dataset
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  EvalResultsBucketNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/eval-results/bucket-name"
+      Type: String
+      Value: !Ref EvalResultsBucket
+      Description: S3 bucket name for eval-results
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  EvalResultsBucketArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/eval-results/bucket-arn"
+      Type: String
+      Value: !GetAtt EvalResultsBucket.Arn
+      Description: S3 bucket ARN for eval-results
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  ArtifactsBucketNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/artifacts/bucket-name"
+      Type: String
+      Value: !Ref ArtifactsBucket
+      Description: S3 bucket name for artifacts
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  ArtifactsBucketArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/s3/artifacts/bucket-arn"
+      Type: String
+      Value: !GetAtt ArtifactsBucket.Arn
+      Description: S3 bucket ARN for artifacts
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  GlueDatabaseNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/glue/eval-results/database-name"
+      Type: String
+      Value: !Ref EvalResultsGlueDatabase
+      Description: Glue database name for eval-results analytics
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+  AthenaWorkgroupNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/athena/eval-analytics/workgroup-name"
+      Type: String
+      Value: !Ref EvalResultsAthenaWorkgroup
+      Description: Athena workgroup name for eval-results analytics
+      Tags:
+        Environment: !Ref Environment
+        Application: !Ref Application
+        ManagedBy: CloudFormation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  StorageKmsKeyArn:
+    Description: ARN of the KMS key used for all storage buckets
+    Value: !GetAtt StorageKmsKey.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-StorageKmsKeyArn"
+
+  StorageKmsKeyId:
+    Description: ID of the KMS key used for all storage buckets
+    Value: !Ref StorageKmsKey
+    Export:
+      Name: !Sub "${AWS::StackName}-StorageKmsKeyId"
+
+  # golden-dataset
+  GoldenDatasetBucketName:
+    Description: Name of the golden-dataset S3 bucket
+    Value: !Ref GoldenDatasetBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-GoldenDatasetBucketName"
+
+  GoldenDatasetBucketArn:
+    Description: ARN of the golden-dataset S3 bucket
+    Value: !GetAtt GoldenDatasetBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-GoldenDatasetBucketArn"
+
+  # eval-results
+  EvalResultsBucketName:
+    Description: Name of the eval-results S3 bucket
+    Value: !Ref EvalResultsBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalResultsBucketName"
+
+  EvalResultsBucketArn:
+    Description: ARN of the eval-results S3 bucket
+    Value: !GetAtt EvalResultsBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalResultsBucketArn"
+
+  # artifacts
+  ArtifactsBucketName:
+    Description: Name of the artifacts S3 bucket
+    Value: !Ref ArtifactsBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-ArtifactsBucketName"
+
+  ArtifactsBucketArn:
+    Description: ARN of the artifacts S3 bucket
+    Value: !GetAtt ArtifactsBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ArtifactsBucketArn"
+
+  # Glue
+  EvalResultsGlueDatabaseName:
+    Description: Glue Data Catalog database name for eval-results analytics
+    Value: !Ref EvalResultsGlueDatabase
+    Export:
+      Name: !Sub "${AWS::StackName}-EvalResultsGlueDatabaseName"
+
+  # Athena
+  AthenaWorkgroupName:
+    Description: Athena workgroup name for eval-results analytics
+    Value: !Ref EvalResultsAthenaWorkgroup
+    Export:
+      Name: !Sub "${AWS::StackName}-AthenaWorkgroupName"
+
+  AthenaResultsBucketName:
+    Description: Name of the Athena query results S3 bucket
+    Value: !Ref AthenaResultsBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-AthenaResultsBucketName"

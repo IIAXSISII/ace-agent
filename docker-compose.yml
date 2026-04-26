@@ -1,0 +1,113 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    platform: linux/arm64
+    ports:
+      - "8080:8080"
+    environment:
+      - MOCK_STORAGE=true
+      - MOCK_PROMPTS=true
+      - OTEL_STACK=local
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
+      - LANGFUSE_BASE_URL=http://langfuse:3000
+      - TOKEN_BUDGET_LIMIT=50000
+    env_file:
+      - .env
+    depends_on:
+      - adot-collector
+      - langfuse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chainlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.chainlit
+    platform: linux/arm64
+    ports:
+      - "8000:8000"
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8080
+    env_file:
+      - .env
+    depends_on:
+      - orchestrator
+
+  adot-collector:
+    image: amazon/aws-otel-collector:latest
+    platform: linux/arm64
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    command: ["--config=/etc/otel-collector-config.yaml"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    platform: linux/arm64
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  langfuse-db:
+    image: postgres:15
+    platform: linux/arm64
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    platform: linux/arm64
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=local-dev-secret
+      - NEXTAUTH_URL=http://localhost:3000
+      - SALT=local-dev-salt
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    platform: linux/arm64
+    ports:
+      - "9090:8428"
+    command:
+      - "-retentionPeriod=30d"
+
+  grafana:
+    image: grafana/grafana:latest
+    platform: linux/arm64
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - victoriametrics
+      - jaeger
+
+volumes:
+  langfuse-db-data:
