@@ -1,7 +1,7 @@
 # ACE Agent — AWS Cloud Engineering Agent
 
-[![CI](https://github.com/iiaxsisii/ace-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/iiaxsisii/ace-agent/actions/workflows/ci.yml)
-[![Tests](https://gist.githubusercontent.com/iiaxsisii/ace-agent-badges/raw/test-results-badge.svg)](https://github.com/iiaxsisii/ace-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/IIAXSISII/ace-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/IIAXSISII/ace-agent/actions/workflows/ci.yml)
+[![Tests](https://github.com/IIAXSISII/ace-agent/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/IIAXSISII/ace-agent/actions/workflows/ci.yml)
 
 A multi-agent AI system that acts as a senior Cloud Engineer co-worker for internal teams. Submit natural language requests and ACE Agent classifies intent, builds a validated execution plan, prompts for missing inputs, and orchestrates specialized sub-agents to interact with internal tools and knowledge systems — all with confidence scoring, citations, and full auditability.
 
