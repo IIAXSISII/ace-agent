@@ -98,8 +98,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment.
 
   Application:
@@ -144,9 +144,10 @@ Resources:
             - !Ref SecurityGroupId
           Subnets: !Ref SubnetIds
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
         Stack: !Ref AWS::StackName
         # VpcId tag provides network context for operational visibility.
         # AWS::BedrockAgentCore::Runtime VpcConfig only accepts SubnetIds and

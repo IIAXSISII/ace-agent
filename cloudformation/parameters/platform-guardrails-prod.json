@@ -1,0 +1,4 @@
+[
+  {"ParameterKey": "Environment", "ParameterValue": "prod"},
+  {"ParameterKey": "Application", "ParameterValue": "ace-agent"}
+]

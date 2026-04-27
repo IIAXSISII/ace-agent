@@ -13,8 +13,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -61,12 +61,14 @@ Resources:
           CidrIp: !Ref VpcCidr
           Description: HTTPS egress to VPC CIDR (covers all VPC endpoints)
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -79,9 +81,10 @@ Resources:
       Value: !Ref VpcId
       Description: VPC ID for the agent networking stack
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   SubnetIdsParam:
     Type: AWS::SSM::Parameter
@@ -91,9 +94,10 @@ Resources:
       Value: !Join [",", !Ref SubnetIds]
       Description: Comma-delimited subnet IDs for agent containers
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   AgentSecurityGroupIdParam:
     Type: AWS::SSM::Parameter
@@ -103,9 +107,10 @@ Resources:
       Value: !GetAtt AgentSecurityGroup.GroupId
       Description: Security Group ID for agent containers
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

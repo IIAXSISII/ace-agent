@@ -15,8 +15,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -131,9 +131,10 @@ Resources:
         # Activate the production ADOT Collector pipeline
         OTEL_STACK: production
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
         Stack: !Ref AWS::StackName
 
   # ── SSM Parameters ────────────────────────────────────────────────────────────
@@ -145,9 +146,10 @@ Resources:
       Value: !GetAtt OrchestratorRuntimeEndpoint.AgentRuntimeArn
       Description: AgentCore Runtime ARN for the Orchestrator
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   RuntimeEndpointUrlParam:
     Type: AWS::SSM::Parameter
@@ -161,9 +163,10 @@ Resources:
         HTTPS invocation URL for the Orchestrator AgentCore Runtime endpoint.
         Format: https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<id>/invocations
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

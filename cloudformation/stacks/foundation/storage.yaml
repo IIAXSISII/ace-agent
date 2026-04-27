@@ -15,8 +15,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -77,12 +77,14 @@ Resources:
               - kms:Decrypt
             Resource: "*"
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -119,12 +121,14 @@ Resources:
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -145,6 +149,10 @@ Resources:
             Condition:
               StringNotEquals:
                 "aws:SourceVpc": !Ref VpcId
+              ArnNotLike:
+                "aws:PrincipalArn":
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-reserved/sso.amazonaws.com/*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
           - Sid: DenyNonTLS
             Effect: Deny
             Principal: "*"
@@ -181,12 +189,14 @@ Resources:
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -207,6 +217,10 @@ Resources:
             Condition:
               StringNotEquals:
                 "aws:SourceVpc": !Ref VpcId
+              ArnNotLike:
+                "aws:PrincipalArn":
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-reserved/sso.amazonaws.com/*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
           - Sid: DenyNonTLS
             Effect: Deny
             Principal: "*"
@@ -263,12 +277,14 @@ Resources:
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -289,6 +305,10 @@ Resources:
             Condition:
               StringNotEquals:
                 "aws:SourceVpc": !Ref VpcId
+              ArnNotLike:
+                "aws:PrincipalArn":
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-reserved/sso.amazonaws.com/*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
           - Sid: DenyNonTLS
             Effect: Deny
             Principal: "*"
@@ -328,12 +348,14 @@ Resources:
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -354,6 +376,10 @@ Resources:
             Condition:
               StringNotEquals:
                 "aws:SourceVpc": !Ref VpcId
+              ArnNotLike:
+                "aws:PrincipalArn":
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-reserved/sso.amazonaws.com/*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
           - Sid: DenyNonTLS
             Effect: Deny
             Principal: "*"
@@ -475,12 +501,14 @@ Resources:
         EngineVersion:
           SelectedEngineVersion: "Athena engine version 3"
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -493,9 +521,10 @@ Resources:
       Value: !GetAtt StorageKmsKey.Arn
       Description: KMS key ARN for storage buckets
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   GoldenDatasetBucketNameParam:
     Type: AWS::SSM::Parameter
@@ -505,9 +534,10 @@ Resources:
       Value: !Ref GoldenDatasetBucket
       Description: S3 bucket name for golden-dataset
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   GoldenDatasetBucketArnParam:
     Type: AWS::SSM::Parameter
@@ -517,9 +547,10 @@ Resources:
       Value: !GetAtt GoldenDatasetBucket.Arn
       Description: S3 bucket ARN for golden-dataset
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   EvalResultsBucketNameParam:
     Type: AWS::SSM::Parameter
@@ -529,9 +560,10 @@ Resources:
       Value: !Ref EvalResultsBucket
       Description: S3 bucket name for eval-results
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   EvalResultsBucketArnParam:
     Type: AWS::SSM::Parameter
@@ -541,9 +573,10 @@ Resources:
       Value: !GetAtt EvalResultsBucket.Arn
       Description: S3 bucket ARN for eval-results
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   ArtifactsBucketNameParam:
     Type: AWS::SSM::Parameter
@@ -553,9 +586,10 @@ Resources:
       Value: !Ref ArtifactsBucket
       Description: S3 bucket name for artifacts
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   ArtifactsBucketArnParam:
     Type: AWS::SSM::Parameter
@@ -565,9 +599,10 @@ Resources:
       Value: !GetAtt ArtifactsBucket.Arn
       Description: S3 bucket ARN for artifacts
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   GlueDatabaseNameParam:
     Type: AWS::SSM::Parameter
@@ -577,9 +612,10 @@ Resources:
       Value: !Ref EvalResultsGlueDatabase
       Description: Glue database name for eval-results analytics
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   AthenaWorkgroupNameParam:
     Type: AWS::SSM::Parameter
@@ -589,9 +625,10 @@ Resources:
       Value: !Ref EvalResultsAthenaWorkgroup
       Description: Athena workgroup name for eval-results analytics
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

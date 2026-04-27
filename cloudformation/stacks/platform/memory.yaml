@@ -15,8 +15,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -47,9 +47,10 @@ Resources:
         - EpisodicMemoryStrategy:
             Name: ShortTermEpisodic
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
         Stack: !Ref AWS::StackName
 
   # ── Long-Term Memory Store ────────────────────────────────────────────────────
@@ -69,9 +70,10 @@ Resources:
         - SemanticMemoryStrategy:
             Name: LongTermSemantic
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
         Stack: !Ref AWS::StackName
 
   # ── SSM Parameters ────────────────────────────────────────────────────────────
@@ -83,9 +85,10 @@ Resources:
       Value: !GetAtt ShortTermMemoryStore.MemoryId
       Description: AgentCore Memory ID for the short-term (session-scoped) memory store
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   LongTermMemoryStoreIdParam:
     Type: AWS::SSM::Parameter
@@ -95,9 +98,10 @@ Resources:
       Value: !GetAtt LongTermMemoryStore.MemoryId
       Description: AgentCore Memory ID for the long-term (cross-session semantic) memory store
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

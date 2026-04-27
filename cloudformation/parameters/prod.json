@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "Environment",
-    "ParameterValue": "production"
+    "ParameterValue": "prod"
   },
   {
     "ParameterKey": "Application",
@@ -9,19 +9,19 @@
   },
   {
     "ParameterKey": "VpcId",
-    "ParameterValue": "<REPLACE_WITH_VPC_ID>"
+    "ParameterValue": "vpc-03bc65d44dbdbfe45"
   },
   {
     "ParameterKey": "SubnetIds",
-    "ParameterValue": "<REPLACE_WITH_SUBNET_IDS>"
+    "ParameterValue": "subnet-04ca1e016d4518683"
   },
   {
     "ParameterKey": "VpcCidr",
-    "ParameterValue": "<REPLACE_WITH_VPC_CIDR>"
+    "ParameterValue": "10.132.0.0/16"
   },
   {
     "ParameterKey": "BedrockModelId",
-    "ParameterValue": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    "ParameterValue": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   },
   {
     "ParameterKey": "OrchestratorImageUri",
@@ -29,23 +29,23 @@
   },
   {
     "ParameterKey": "NetworkingStackName",
-    "ParameterValue": "ace-agent-foundation-networking-production"
+    "ParameterValue": "ace-agent-foundation-networking-prod"
   },
   {
     "ParameterKey": "IdentityStackName",
-    "ParameterValue": "ace-agent-foundation-identity-production"
+    "ParameterValue": "ace-agent-foundation-identity-prod"
   },
   {
     "ParameterKey": "GuardrailsStackName",
-    "ParameterValue": "ace-agent-platform-guardrails-production"
+    "ParameterValue": "ace-agent-platform-guardrails-prod"
   },
   {
     "ParameterKey": "MemoryStackName",
-    "ParameterValue": "ace-agent-platform-memory-production"
+    "ParameterValue": "ace-agent-platform-memory-prod"
   },
   {
     "ParameterKey": "GatewayStackName",
-    "ParameterValue": "ace-agent-platform-gateway-production"
+    "ParameterValue": "ace-agent-platform-gateway-prod"
   },
   {
     "ParameterKey": "OtelExporterEndpoint",

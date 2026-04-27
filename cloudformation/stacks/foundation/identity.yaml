@@ -27,8 +27,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -68,12 +68,14 @@ Resources:
               - kms:Decrypt
             Resource: "*"
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -201,12 +203,14 @@ Resources:
                 Resource:
                   - !GetAtt OrchestratorKmsKey.Arn
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -225,12 +229,14 @@ Resources:
       KmsKeyId: !Ref OrchestratorKmsKey
       SecretString: '{"placeholder": "Replace with actual credentials in F04+"}'
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -243,9 +249,10 @@ Resources:
       Value: !GetAtt OrchestratorKmsKey.Arn
       Description: KMS key ARN for Orchestrator secrets encryption
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   OrchestratorExecutionRoleArnParam:
     Type: AWS::SSM::Parameter
@@ -255,9 +262,10 @@ Resources:
       Value: !GetAtt OrchestratorExecutionRole.Arn
       Description: IAM execution role ARN for the Orchestrator AgentCore Runtime
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   ExternalApiCredentialsSecretArnParam:
     Type: AWS::SSM::Parameter
@@ -267,9 +275,10 @@ Resources:
       Value: !Ref ExternalApiCredentialsSecret
       Description: Secrets Manager ARN for external API credentials
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs

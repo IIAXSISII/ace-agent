@@ -366,10 +366,20 @@ When `ENV=production`, the Makefile creates a CloudFormation change set, display
 
 ### Parameter Files
 
-| File | Purpose |
+Each CloudFormation stack has its own parameter file under `cloudformation/parameters/`, named `{tier}-{stack}-{env}.json`:
+
+| File | Stack |
 |---|---|
-| `cloudformation/parameters/local.json` | Local overrides — mock sub-agents, local ADOT endpoint, reduced token budget |
-| `cloudformation/parameters/production.json` | Production values — real VpcId, SubnetIds, model IDs, full token budget |
+| `local.json` | Shared local overrides — mock sub-agents, local ADOT endpoint, reduced token budget |
+| `prod.json` | Shared production values — VpcId, SubnetIds, model IDs, full token budget |
+| `foundation-networking-prod.json` | Foundation networking — VPC, subnets, CIDR |
+| `foundation-identity-prod.json` | Foundation identity — IAM, Secrets Manager |
+| `foundation-data-prod.json` | Foundation data — DynamoDB tables |
+| `foundation-storage-prod.json` | Foundation storage — S3 buckets, Athena, Glue |
+| `platform-guardrails-prod.json` | Platform guardrails — Bedrock Guardrails policy |
+| `platform-memory-prod.json` | Platform memory — AgentCore Memory stores |
+| `platform-gateway-prod.json` | Platform gateway — AgentCore Gateway |
+| `application-orchestrator-prod.json` | Application orchestrator — AgentCore Runtime endpoint |
 
 All environment differences are driven by these parameter files and environment variables. No `if env == "production"` branches in Python code.
 
@@ -454,7 +464,7 @@ on:
 │   │   ├── platform/          # guardrails, memory, gateway
 │   │   └── application/agents/# One stack per agent
 │   ├── modules/               # Reusable CloudFormation modules
-│   ├── parameters/            # local.json, production.json
+│   ├── parameters/            # Per-stack: {tier}-{stack}-{env}.json + shared local/production
 │   └── Makefile               # Deploy/preview/destroy targets
 ├── grafana/                   # Pre-built dashboards + provisioning
 ├── docker-compose.yml         # Full local dev stack

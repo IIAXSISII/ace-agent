@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := help
+
 .PHONY: dev test lint docker-up docker-down help \
         deploy-foundation deploy-platform deploy-agents deploy-agent \
         preview drift-detect destroy

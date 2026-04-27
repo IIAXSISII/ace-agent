@@ -1,0 +1,5 @@
+[
+  {"ParameterKey": "Environment", "ParameterValue": "prod"},
+  {"ParameterKey": "Application", "ParameterValue": "ace-agent"},
+  {"ParameterKey": "OAuthDiscoveryUrl", "ParameterValue": "https://okta.triplelift.net/.well-known/openid-configuration"}
+]

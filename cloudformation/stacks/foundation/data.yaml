@@ -12,8 +12,8 @@ Parameters:
     Type: String
     AllowedValues:
       - local
-      - staging
-      - production
+      - dev
+      - prod
     Description: Deployment environment
 
   Application:
@@ -40,8 +40,6 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
-      StreamSpecification:
-        StreamViewType: DISABLED
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -56,12 +54,14 @@ Resources:
         - AttributeName: stepTimestamp
           KeyType: RANGE
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -97,12 +97,14 @@ Resources:
           Projection:
             ProjectionType: ALL
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -131,12 +133,14 @@ Resources:
         - AttributeName: version
           KeyType: RANGE
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -185,12 +189,14 @@ Resources:
           Projection:
             ProjectionType: ALL
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -232,12 +238,14 @@ Resources:
           Projection:
             ProjectionType: ALL
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -275,12 +283,14 @@ Resources:
           Projection:
             ProjectionType: ALL
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -318,12 +328,14 @@ Resources:
           Projection:
             ProjectionType: ALL
       Tags:
-        - Key: Environment
+        - Key: env
           Value: !Ref Environment
-        - Key: Application
+        - Key: application
           Value: !Ref Application
-        - Key: ManagedBy
+        - Key: created-with
           Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
         - Key: Stack
           Value: !Ref AWS::StackName
 
@@ -336,9 +348,10 @@ Resources:
       Value: !Ref ExecutionLogsTable
       Description: DynamoDB table name for execution-logs
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   ExecutionLogsTableArnParam:
     Type: AWS::SSM::Parameter
@@ -348,9 +361,10 @@ Resources:
       Value: !GetAtt ExecutionLogsTable.Arn
       Description: DynamoDB table ARN for execution-logs
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   SubagentRegistryTableNameParam:
     Type: AWS::SSM::Parameter
@@ -360,9 +374,10 @@ Resources:
       Value: !Ref SubagentRegistryTable
       Description: DynamoDB table name for subagent-registry
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   SubagentRegistryTableArnParam:
     Type: AWS::SSM::Parameter
@@ -372,9 +387,10 @@ Resources:
       Value: !GetAtt SubagentRegistryTable.Arn
       Description: DynamoDB table ARN for subagent-registry
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   PromptTemplateRegistryTableNameParam:
     Type: AWS::SSM::Parameter
@@ -384,9 +400,10 @@ Resources:
       Value: !Ref PromptTemplateRegistryTable
       Description: DynamoDB table name for prompt-template-registry
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   PromptTemplateRegistryTableArnParam:
     Type: AWS::SSM::Parameter
@@ -396,9 +413,10 @@ Resources:
       Value: !GetAtt PromptTemplateRegistryTable.Arn
       Description: DynamoDB table ARN for prompt-template-registry
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   GuardrailViolationsTableNameParam:
     Type: AWS::SSM::Parameter
@@ -408,9 +426,10 @@ Resources:
       Value: !Ref GuardrailViolationsTable
       Description: DynamoDB table name for guardrail-violations
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   GuardrailViolationsTableArnParam:
     Type: AWS::SSM::Parameter
@@ -420,9 +439,10 @@ Resources:
       Value: !GetAtt GuardrailViolationsTable.Arn
       Description: DynamoDB table ARN for guardrail-violations
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   EvalRunResultsTableNameParam:
     Type: AWS::SSM::Parameter
@@ -432,9 +452,10 @@ Resources:
       Value: !Ref EvalRunResultsTable
       Description: DynamoDB table name for eval-run-results
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   EvalRunResultsTableArnParam:
     Type: AWS::SSM::Parameter
@@ -444,9 +465,10 @@ Resources:
       Value: !GetAtt EvalRunResultsTable.Arn
       Description: DynamoDB table ARN for eval-run-results
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   HumanReviewQueueTableNameParam:
     Type: AWS::SSM::Parameter
@@ -456,9 +478,10 @@ Resources:
       Value: !Ref HumanReviewQueueTable
       Description: DynamoDB table name for human-review-queue
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   HumanReviewQueueTableArnParam:
     Type: AWS::SSM::Parameter
@@ -468,9 +491,10 @@ Resources:
       Value: !GetAtt HumanReviewQueueTable.Arn
       Description: DynamoDB table ARN for human-review-queue
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   SessionStateTableNameParam:
     Type: AWS::SSM::Parameter
@@ -480,9 +504,10 @@ Resources:
       Value: !Ref SessionStateTable
       Description: DynamoDB table name for session-state
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
   SessionStateTableArnParam:
     Type: AWS::SSM::Parameter
@@ -492,9 +517,10 @@ Resources:
       Value: !GetAtt SessionStateTable.Arn
       Description: DynamoDB table ARN for session-state
       Tags:
-        Environment: !Ref Environment
-        Application: !Ref Application
-        ManagedBy: CloudFormation
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Outputs
