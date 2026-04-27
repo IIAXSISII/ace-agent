@@ -11,8 +11,6 @@ Feature: feature-02-foundation-infra
 from __future__ import annotations
 
 import os
-import re
-import string
 import sys
 import time
 import uuid
@@ -20,7 +18,7 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 # ---------------------------------------------------------------------------
@@ -39,7 +37,7 @@ os.environ.setdefault("MOCK_STORAGE", "true")
 # ---------------------------------------------------------------------------
 # Import the modules under test after stubs are in place
 # ---------------------------------------------------------------------------
-from src.guardrails.bedrock import get_guardrailed_llm, log_violation  # noqa: E402
+from src.guardrails.bedrock import log_violation  # noqa: E402
 from src.orchestrator.nodes.scan_output_guardrails import (  # noqa: E402
     _GUARDRAIL_BLOCKED_RESPONSE,
     scan_output_guardrails,
@@ -78,7 +76,7 @@ def _st_name() -> st.SearchStrategy[str]:
         _UPPER,
         st.text(_LOWER, min_size=2, max_size=8),
     )
-    return st.builds(lambda f, l: f"{f} {l}", first, last)
+    return st.builds(lambda f, ln: f"{f} {ln}", first, last)
 
 
 def _st_email() -> st.SearchStrategy[str]:
@@ -94,7 +92,7 @@ def _st_email() -> st.SearchStrategy[str]:
         max_size=8,
     )
     tld = st.sampled_from(["com", "org", "net", "io"])
-    return st.builds(lambda l, d, t: f"{l}@{d}.{t}", local, domain, tld)
+    return st.builds(lambda loc, d, t: f"{loc}@{d}.{t}", local, domain, tld)
 
 
 def _st_api_key() -> st.SearchStrategy[str]:

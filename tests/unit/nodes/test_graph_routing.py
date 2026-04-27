@@ -16,7 +16,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock
 
-import pytest
 
 # ── Stub heavy optional dependencies so graph.py can be imported ─────────────
 # graph.py imports langgraph and all node modules at module level.

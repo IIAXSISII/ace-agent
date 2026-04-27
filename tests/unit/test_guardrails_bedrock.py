@@ -15,9 +15,8 @@ import os
 import sys
 import time
 from types import ModuleType
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Stub langchain_aws before importing the module under test so tests run
@@ -205,7 +204,7 @@ class TestLogViolation:
 
     def test_log_violation_timestamp_is_utc_iso(self):
         """timestamp must be a UTC ISO-8601 string."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         captured: list[dict] = []
 

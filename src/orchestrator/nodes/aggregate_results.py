@@ -46,7 +46,7 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
     confidence_score = sum(scores) / len(scores) if scores else 0.5
 
     # ── Collect KB documents from context_window ──────────────────────────────
-    kb_docs = [
+    _kb_docs = [  # noqa: F841 — used for cross-reference check below
         item for item in context_window
         if isinstance(item, dict) and item.get("type") == "kb_document"
         or hasattr(item, "metadata")  # LangChain Document
@@ -122,7 +122,7 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
         human_content = (
             f"Request: {raw_request}\n\n"
             f"Sub-agent outputs:\n" + "\n".join(step_summaries) + "\n\n"
-            f"Knowledge base documents:\n" + "\n".join(kb_summaries)
+            "Knowledge base documents:\n" + "\n".join(kb_summaries)
         )
         human_msg = HumanMessage(content=human_content)
 

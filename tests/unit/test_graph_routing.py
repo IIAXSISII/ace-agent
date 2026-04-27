@@ -15,7 +15,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock
 
-import pytest
 
 os.environ.setdefault("MOCK_STORAGE", "true")
 os.environ.setdefault("MOCK_PROMPTS", "true")

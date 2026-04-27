@@ -2,8 +2,7 @@ import os
 import uuid
 import httpx
 import chainlit as cl
-from src.ui.renderers import render_plan, render_citations, render_confidence
-from src.ui.handlers import ChainlitStepHandler
+from src.ui.renderers import render_citations, render_confidence
 
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8080")
 

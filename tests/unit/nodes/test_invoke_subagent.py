@@ -6,7 +6,6 @@ Covers: Req 4.8 (hop limit), Req 4.9 (cycle detection), Req 4.10 (token budget)
 import hashlib
 import json
 
-import pytest
 
 from src.orchestrator.nodes.invoke_subagent import _check_safety_limits, invoke_subagent
 

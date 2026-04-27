@@ -1067,7 +1067,7 @@ def test_property22_prompt_template_id_and_version_recorded_in_log(plan):
             "agent_id": "mock-agent",
             "tool_name": "get_metric_statistics",
             "agent_result": {"result": "ok", "confidence_score": 0.9},
-            "prompt_template_id": f"monitoring_query-v1",
+            "prompt_template_id": "monitoring_query-v1",
             "prompt_template_version": "1.0.0",
         }
         for i in range(len(plan))
@@ -1109,7 +1109,6 @@ def test_property22_prompt_template_id_and_version_recorded_in_log(plan):
 @settings(max_examples=20)
 def test_property23_rendered_prompt_has_no_unresolved_placeholders(category):
     # Feature: feature-01-core-orchestrator, Property 23: ∀ rendered prompt: no unresolved placeholder variables
-    import re
     from src.orchestrator.prompts import load_prompt_template, validate_rendered_prompt, UnresolvedPlaceholderError
 
     # load_prompt_template is lru_cached; clear between hypothesis examples

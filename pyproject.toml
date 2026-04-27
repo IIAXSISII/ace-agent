@@ -29,6 +29,8 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "httpx>=0.27",
+    "ruff>=0.8",
+    "cfn-lint>=1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -37,3 +39,19 @@ testpaths = ["tests"]
 markers = [
     "integration: marks tests that invoke external tools or subprocesses (e.g. cfn-lint)",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 160
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C901"]
+ignore = ["E402"]  # Import order is intentional in graph.py (TypedDefs first) and test files (stubs first)
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
+"src/orchestrator/nodes/aggregate_results.py" = ["C901"]  # Will be refactored — tracked
+"src/orchestrator/nodes/detect_missing_inputs.py" = ["E501"]  # Long prompt string

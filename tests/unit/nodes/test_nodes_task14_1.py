@@ -10,7 +10,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 os.environ.setdefault("MOCK_STORAGE", "true")
 os.environ.setdefault("MOCK_PROMPTS", "true")
@@ -276,7 +275,7 @@ class TestRetrieveKnowledge:
         assert result["task_category"] == "monitoring_query"
 
     def test_falls_back_to_fixtures_when_retriever_raises(self, monkeypatch):
-        from src.orchestrator.nodes.retrieve_knowledge import retrieve_knowledge, FIXTURE_DOCS
+        from src.orchestrator.nodes.retrieve_knowledge import FIXTURE_DOCS
         monkeypatch.setenv("KNOWLEDGE_BASE_ID", "kb-test-123")
         # Stub AmazonKnowledgeBasesRetriever inside the module
         mock_retriever_cls = MagicMock()
