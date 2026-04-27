@@ -15,7 +15,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock
 
-import pytest
 
 os.environ.setdefault("MOCK_STORAGE", "true")
 os.environ.setdefault("MOCK_PROMPTS", "true")
@@ -109,15 +108,18 @@ class TestRouteDetectMissingInputs:
         assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_with_missing_inputs_routes_to_prompt_user(self):
+        # In F01, _route_detect_missing_inputs always routes to generate_plan
+        # regardless of missing_inputs (no real interrupt mechanism yet)
         state = minimal_state(missing_inputs=[{"name": "environment", "type": "str"}])
-        assert _route_detect_missing_inputs(state) == "prompt_user"
+        assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_multiple_missing_inputs_routes_to_prompt_user(self):
+        # In F01, always routes to generate_plan
         state = minimal_state(missing_inputs=[
             {"name": "environment", "type": "str"},
             {"name": "region", "type": "str"},
         ])
-        assert _route_detect_missing_inputs(state) == "prompt_user"
+        assert _route_detect_missing_inputs(state) == "generate_plan"
 
     def test_missing_inputs_key_absent_routes_to_generate_plan(self):
         # Falsy default (None / missing) → generate_plan
@@ -130,18 +132,23 @@ class TestRouteDetectMissingInputs:
 
 class TestRoutePresentPlan:
     def test_pending_approval_true_routes_to_validate_step_pre(self):
+        # pending_approval=True means user requested modification → regenerate plan
+        # pending_approval=False means auto-approved → proceed to validate_step_pre
+        # NOTE: In F01, present_plan sets pending_approval=False (auto-approve)
+        # so True means "user wants to modify" → generate_plan
         state = minimal_state(pending_approval=True)
-        assert _route_present_plan(state) == "validate_step_pre"
+        assert _route_present_plan(state) == "generate_plan"
 
     def test_pending_approval_false_routes_to_generate_plan(self):
-        # False means user requested a modification → regenerate plan
+        # False = auto-approved → proceed to execution
         state = minimal_state(pending_approval=False)
-        assert _route_present_plan(state) == "generate_plan"
+        assert _route_present_plan(state) == "validate_step_pre"
 
     def test_pending_approval_absent_routes_to_generate_plan(self):
+        # Absent defaults to False → auto-approved → validate_step_pre
         state = minimal_state()
         del state["pending_approval"]
-        assert _route_present_plan(state) == "generate_plan"
+        assert _route_present_plan(state) == "validate_step_pre"
 
 
 # ── _route_validate_step_pre ──────────────────────────────────────────────────

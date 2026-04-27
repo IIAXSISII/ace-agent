@@ -20,7 +20,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 os.environ.setdefault("MOCK_STORAGE", "true")
 os.environ.setdefault("MOCK_PROMPTS", "true")
@@ -586,7 +585,7 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = minimal_state(pending_approval=False)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_pending_approval_starts_false_before_call(self):
         # Verify the precondition: pending_approval is False before present_plan runs
@@ -594,14 +593,14 @@ class TestPresentPlan:
         state = minimal_state(pending_approval=False)
         assert state["pending_approval"] is False
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_idempotent_when_already_true(self):
         # Calling present_plan when already approved keeps it True
         from src.orchestrator.nodes.present_plan import present_plan
         state = minimal_state(pending_approval=True)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_does_not_modify_execution_plan(self):
         # present_plan must not alter the plan — only signals readiness for approval
@@ -631,4 +630,4 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = minimal_state()
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved

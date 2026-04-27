@@ -71,9 +71,9 @@
   - [x] 11.5 Create `chainlit.md` welcome message and `chainlit.toml` config (theme, project name)
 
 - [x] 12. Local observability stack
-  - [x] 12.1 Create `docker-compose.yml` with all 8 services: `chainlit` (8000), `orchestrator` (8080), `adot-collector` (4317/4318), `jaeger` (16686), `langfuse` (3000), `langfuse-db`, `victoriametrics` (9090), `grafana` (3001)
-  - [x] 12.2 Create `otel-collector-config.yaml`: traces → Jaeger, metrics → VictoriaMetrics via `prometheusremotewrite`; W3C TraceContext propagation
-  - [x] 12.3 Create `grafana/dashboards/` with pre-built dashboard JSON pre-wired to Jaeger, Langfuse, and VictoriaMetrics datasources
+  - [x] 12.1 Create `docker-compose.yml` with all 8 services: `chainlit` (8000), `orchestrator` (8080), `adot-collector` (4317/4318), `victoriatraces` (9428), `langfuse` (3000), `langfuse-db`, `victoriametrics` (9091), `grafana` (3001)
+  - [x] 12.2 Create `otel-collector-config.yaml`: traces → VictoriaTraces, metrics → VictoriaMetrics via `prometheusremotewrite`; W3C TraceContext propagation
+  - [x] 12.3 Create `grafana/dashboards/` with pre-built dashboard JSON pre-wired to VictoriaTraces, Langfuse, and VictoriaMetrics datasources
   - [x] 12.4 Create `grafana/provisioning/` datasource and dashboard provisioning configs so Grafana auto-loads on startup
 
 - [x] 13. CloudFormation foundation templates

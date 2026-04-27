@@ -16,7 +16,7 @@ Requests are classified into one of: `incident_investigation`, `infrastructure_c
 - **Execution planning**: Ordered, confidence-scored plans are shown to the user before any execution begins
 - **Multi-agent orchestration**: Specialized sub-agents (Confluence, CloudWatch, VictoriaMetrics, GitHub) are invoked via AgentCore Gateway over MCP protocol
 - **Knowledge retrieval**: RAG over internal docs, runbooks, and incident history via Amazon Bedrock Knowledge Bases
-- **Observability**: OTEL traces on all containers via AgentCore Observability (production) and Langfuse + Jaeger + VictoriaMetrics + Grafana (local dev)
+- **Observability**: OTEL traces on all containers via AgentCore Observability (production) and Langfuse + VictoriaTraces + VictoriaMetrics + Grafana (local dev)
 
 ## Design Principles
 

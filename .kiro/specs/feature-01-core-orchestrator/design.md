@@ -10,7 +10,7 @@
 
 F01 delivers the runnable skeleton of the AWS Cloud Engineering Agent. A developer can `docker compose up -d` and `uvicorn src.orchestrator.main:app --port 8080 --reload` to get a fully wired LangGraph `StateGraph` that accepts natural language requests, classifies intent, detects missing inputs, generates a confidence-scored execution plan, validates each step pre/post execution, invokes mock sub-agents, and streams real-time progress through a Chainlit UI — all without any AWS deployment beyond Bedrock API access for LLM inference.
 
-The design covers the complete request lifecycle from intake through response, the full `OrchestratorState` TypedDict, every graph node and conditional edge, the Chainlit UI integration, the ADOT + Langfuse + Jaeger + VictoriaMetrics + Grafana local observability stack, and the CloudFormation foundation stacks for DynamoDB and S3 that will be used in production (F02).
+The design covers the complete request lifecycle from intake through response, the full `OrchestratorState` TypedDict, every graph node and conditional edge, the Chainlit UI integration, the ADOT + Langfuse + VictoriaTraces + VictoriaMetrics + Grafana local observability stack, and the CloudFormation foundation stacks for DynamoDB and S3 that will be used in production (F02).
 
 ---
 
@@ -25,7 +25,7 @@ graph TB
         ORCH[Orchestrator<br/>FastAPI + LangGraph<br/>port 8080]
         MOCK[Mock Sub-Agents<br/>in-process]
         ADOT[ADOT Collector<br/>port 4317]
-        JAEGER[Jaeger<br/>port 16686]
+        VT[VictoriaTraces<br/>port 9428]
         LF[Langfuse<br/>port 3000]
         VM[VictoriaMetrics<br/>port 9090]
         GRAF[Grafana<br/>port 3001]
@@ -39,11 +39,11 @@ graph TB
     ORCH -->|in-process invoke| MOCK
     ORCH -->|ChatBedrock| BEDROCK
     ORCH -->|OTLP gRPC| ADOT
-    ADOT --> JAEGER
+    ADOT --> VT
     ADOT --> VM
     LF --> GRAF
     VM --> GRAF
-    JAEGER --> GRAF
+    VT --> GRAF
 ```
 
 ### Request Lifecycle
@@ -477,15 +477,15 @@ Services included:
 |---|---|---|---|
 | `orchestrator` | `./src/orchestrator` (ARM64) | 8080 | Orchestrator FastAPI app |
 | `chainlit` | `./src/ui` (ARM64) | 8000 | Chat UI — connects to orchestrator via `ORCHESTRATOR_URL=http://orchestrator:8080` |
-| `adot-collector` | `amazon/aws-otel-collector` | 4317 (gRPC), 4318 (HTTP) | Receives OTLP; routes to Jaeger + VictoriaMetrics |
-| `jaeger` | `jaegertracing/all-in-one` | 16686 | Trace UI |
+| `adot-collector` | `amazon/aws-otel-collector` | 4317 (gRPC), 4318 (HTTP) | Receives OTLP; routes to VictoriaTraces + VictoriaMetrics |
+| `victoriatraces` | `victoriametrics/victoria-traces` | 9428 | Distributed trace storage + UI |
 | `langfuse` | `langfuse/langfuse` | 3000 | LLM trace capture |
 | `langfuse-db` | `postgres:15` | 5432 | PostgreSQL backend for Langfuse |
 | `victoriametrics` | `victoriametrics/victoria-metrics` | 9090 | Metrics backend (Prometheus-compatible) |
-| `grafana` | `grafana/grafana` | 3001 | Dashboards (pre-wired to Jaeger + Langfuse + VictoriaMetrics) |
+| `grafana` | `grafana/grafana` | 3001 | Dashboards (pre-wired to VictoriaTraces + Langfuse + VictoriaMetrics) |
 
 ADOT Collector config routes:
-- Traces → Jaeger (local) via `jaeger` exporter
+- Traces → VictoriaTraces (local) via `otlphttp/victoriatraces` exporter
 - Metrics → VictoriaMetrics via `prometheusremotewrite` exporter
 - W3C TraceContext propagation (not X-Ray) in local mode
 

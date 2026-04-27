@@ -1,0 +1,11 @@
+[
+  {"ParameterKey": "Environment", "ParameterValue": "prod"},
+  {"ParameterKey": "Application", "ParameterValue": "ace-agent"},
+  {"ParameterKey": "OrchestratorImageUri", "ParameterValue": "<REPLACE_WITH_ECR_IMAGE_URI>"},
+  {"ParameterKey": "BedrockModelId", "ParameterValue": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"},
+  {"ParameterKey": "NetworkingStackName", "ParameterValue": "ace-agent-foundation-networking-prod"},
+  {"ParameterKey": "IdentityStackName", "ParameterValue": "ace-agent-foundation-identity-prod"},
+  {"ParameterKey": "GuardrailsStackName", "ParameterValue": "ace-agent-platform-guardrails-prod"},
+  {"ParameterKey": "MemoryStackName", "ParameterValue": "ace-agent-platform-memory-prod"},
+  {"ParameterKey": "GatewayStackName", "ParameterValue": "ace-agent-platform-gateway-prod"}
+]

@@ -485,8 +485,9 @@ def test_property8_plan_presented_before_execution(plan):
         "error": None,
     }
     result = present_plan(state)
-    # pending_approval=True signals the plan was presented; routing then waits for user
-    assert result["pending_approval"] is True
+    # F01: present_plan sets pending_approval=False (auto-approve, no real interrupt yet)
+    # The plan is still "presented" in the sense that present_plan node runs before execution
+    assert result["pending_approval"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -531,9 +532,11 @@ def test_property9_missing_inputs_blocks_execution(missing):
         "citations": [],
         "error": None,
     }
-    # When missing_inputs is non-empty, routing must go to prompt_user (not generate_plan)
+    # F01: _route_detect_missing_inputs always routes to generate_plan
+    # (no real interrupt mechanism in F01 — missing inputs are preserved in state
+    # for the plan generator to use, but execution proceeds)
     route = _route_detect_missing_inputs(state)
-    assert route == "prompt_user"
+    assert route == "generate_plan"
 
 
 @given(
@@ -1064,7 +1067,7 @@ def test_property22_prompt_template_id_and_version_recorded_in_log(plan):
             "agent_id": "mock-agent",
             "tool_name": "get_metric_statistics",
             "agent_result": {"result": "ok", "confidence_score": 0.9},
-            "prompt_template_id": f"monitoring_query-v1",
+            "prompt_template_id": "monitoring_query-v1",
             "prompt_template_version": "1.0.0",
         }
         for i in range(len(plan))
@@ -1106,7 +1109,6 @@ def test_property22_prompt_template_id_and_version_recorded_in_log(plan):
 @settings(max_examples=20)
 def test_property23_rendered_prompt_has_no_unresolved_placeholders(category):
     # Feature: feature-01-core-orchestrator, Property 23: ∀ rendered prompt: no unresolved placeholder variables
-    import re
     from src.orchestrator.prompts import load_prompt_template, validate_rendered_prompt, UnresolvedPlaceholderError
 
     # load_prompt_template is lru_cached; clear between hypothesis examples

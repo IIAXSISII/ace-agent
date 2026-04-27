@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Reusable Agent Runtime Endpoint Module.
+  Encapsulates the AgentCore Runtime (container deployment) and AgentCore Gateway
+  registration pattern shared by all agent stacks.
+
+  IMPORTANT: This module intentionally does NOT create an IAM role.
+  Each calling agent stack is responsible for provisioning its own dedicated
+  execution role with permissions scoped to that agent's required actions only,
+  and passing the ARN via the ExecutionRoleArn parameter. This enforces the
+  per-agent IAM isolation contract at the module boundary — it is impossible
+  to accidentally share a role by using this module.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata
+# ──────────────────────────────────────────────────────────────────────────────
+Metadata:
+  IamRoleOwnership: >
+    IAM role creation is intentionally excluded from this module.
+    Each agent stack owns its own dedicated execution role. The calling stack
+    must provision an AWS::IAM::Role with a trust policy for
+    bedrock-agentcore.amazonaws.com and pass its ARN as ExecutionRoleArn.
+    Roles are never shared across agents — see identity.yaml for the
+    Orchestrator role pattern and cloudformation/stacks/application/agents/
+    for the per-agent role pattern.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  AgentName:
+    Type: String
+    Description: >
+      Logical name of the agent (e.g. "orchestrator", "confluence_agent").
+      Used to construct resource names. Must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$.
+    AllowedPattern: "^[a-zA-Z][a-zA-Z0-9_]{0,47}$"
+
+  ContainerImageUri:
+    Type: String
+    Description: >
+      ECR URI of the ARM64 container image to deploy.
+      Format: <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+
+  ExecutionRoleArn:
+    Type: String
+    Description: >
+      ARN of the dedicated IAM execution role provisioned by the calling agent stack.
+      This module does NOT create a role — the caller must provision its own
+      scoped role and pass the ARN here. Required.
+    AllowedPattern: "arn:aws(-[^:]+)?:iam::[0-9]{12}:role/.+"
+
+  # VpcId is accepted as a parameter for documentation and consistency with
+  # other stacks that consume VPC references. AWS::BedrockAgentCore::Runtime
+  # VpcConfig only requires SubnetIds and SecurityGroupId — VpcId is not a
+  # direct property of the runtime resource but is retained here so callers
+  # can pass it through for audit/tagging purposes.
+  # cfn-lint W2001 suppressed: VpcId is intentionally accepted but not used
+  # directly in runtime VpcConfig (only subnets and security groups are needed).
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: >
+      VPC ID where the agent runtime will run. Accepted for consistency with
+      other stacks; not used directly in the runtime VpcConfig (subnets and
+      security group are sufficient for AgentCore Runtime placement).
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-delimited list of subnet IDs for the agent runtime containers.
+
+  SecurityGroupId:
+    Type: String
+    Description: Security Group ID to attach to the agent runtime containers.
+
+  # GatewayIdentifier is the AgentCore Gateway ID (not the URL) used to
+  # register this agent as a Gateway target. The calling stack imports
+  # GatewayId from the gateway stack and passes it here.
+  # GatewayEndpointUrl is accepted for documentation/consistency but the
+  # GatewayTarget resource requires GatewayIdentifier (the ID), not the URL.
+  # cfn-lint W2001 suppressed: GatewayEndpointUrl is informational — callers
+  # pass it for documentation; GatewayIdentifier is the operative parameter.
+  GatewayEndpointUrl:
+    Type: String
+    Description: >
+      AgentCore Gateway endpoint URL. Accepted for documentation and
+      consistency with other stacks. The GatewayTarget registration uses
+      GatewayIdentifier (the Gateway ID) rather than the URL directly.
+
+  GatewayIdentifier:
+    Type: String
+    Description: >
+      AgentCore Gateway identifier (ID). Used to register this agent as a
+      Gateway target. Import GatewayId from the gateway stack output and
+      pass it here.
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - dev
+      - prod
+    Description: Deployment environment.
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── AgentCore Runtime ─────────────────────────────────────────────────────────
+  # Deploys the agent container on AgentCore Runtime (Firecracker, ARM64, serverless).
+  # ExecutionRoleArn is passed directly from the calling stack — this module
+  # never creates or references a shared role.
+  # Environment variables are set by the calling stack via the AgentCore Runtime
+  # resource in the calling template — this module provisions the base runtime
+  # and the calling stack adds agent-specific env vars via stack parameters or
+  # by extending this module pattern.
+  # cfn-lint W3001 justification: AWS::BedrockAgentCore::Runtime is a new
+  # resource type that may not yet be in the cfn-lint registry; the resource
+  # schema is valid per the CloudFormation Template Reference.
+  AgentRuntime:
+    Type: AWS::BedrockAgentCore::Runtime
+    # cfn-lint: disable=W3001
+    Properties:
+      # AgentRuntimeName must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$
+      # AgentName parameter is already validated against this pattern.
+      AgentRuntimeName: !Ref AgentName
+      Description: !Sub >
+        ACE Agent runtime for ${AgentName} in ${Environment}.
+        Deployed via agent-runtime-endpoint module.
+      RoleArn: !Ref ExecutionRoleArn
+      AgentRuntimeArtifact:
+        ContainerConfiguration:
+          ContainerUri: !Ref ContainerImageUri
+      NetworkConfiguration:
+        NetworkMode: VPC
+        NetworkModeConfig:
+          SecurityGroups:
+            - !Ref SecurityGroupId
+          Subnets: !Ref SubnetIds
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+        Stack: !Ref AWS::StackName
+        # VpcId tag provides network context for operational visibility.
+        # AWS::BedrockAgentCore::Runtime VpcConfig only accepts SubnetIds and
+        # SecurityGroups — VpcId is surfaced here for audit and filtering.
+        VpcId: !Ref VpcId
+
+  # ── AgentCore Gateway Target ──────────────────────────────────────────────────
+  # Registers this agent as an MCP tool target on the AgentCore Gateway.
+  # The Orchestrator discovers available sub-agent tools via the Gateway at runtime.
+  # In F02 this is a placeholder registration; populated with real tool schemas
+  # in F04+ when sub-agents are deployed.
+  # cfn-lint W3001 justification: AWS::BedrockAgentCore::GatewayTarget is a new
+  # resource type that may not yet be in the cfn-lint registry; the resource
+  # schema is valid per the CloudFormation Template Reference.
+  AgentGatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    # cfn-lint: disable=W3001
+    Properties:
+      # Name must match ^([0-9a-zA-Z][-]?){1,100}$
+      Name: !Sub "${AgentName}-target"
+      Description: !Sub >
+        MCP gateway target for ${AgentName} in ${Environment}.
+        Routes Orchestrator tool calls to the agent runtime endpoint.
+        Gateway URL: ${GatewayEndpointUrl}
+      GatewayIdentifier: !Ref GatewayIdentifier
+      # GatewayEndpointUrl is surfaced as a tag for operational visibility —
+      # the GatewayTarget resource uses GatewayIdentifier (the ID) for
+      # registration, but the URL is useful for debugging and audit.
+      TargetConfiguration:
+        Mcp:
+          McpServer:
+            Endpoint: !Sub
+              - "https://bedrock-agentcore.${AWS::Region}.amazonaws.com/runtimes/${RuntimeId}/invocations"
+              - RuntimeId: !GetAtt AgentRuntime.AgentRuntimeId
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  RuntimeEndpointArn:
+    Description: >
+      ARN of the AgentCore Runtime. Exported for consumption by the calling
+      stack and published to SSM by the calling stack.
+    Value: !GetAtt AgentRuntime.AgentRuntimeArn
+    Export:
+      Name: !Sub "${AWS::StackName}-RuntimeEndpointArn"
+
+  RuntimeEndpointUrl:
+    Description: >
+      HTTPS invocation URL for the AgentCore Runtime endpoint.
+      Format: https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<id>/invocations
+    Value: !Sub
+      - "https://bedrock-agentcore.${AWS::Region}.amazonaws.com/runtimes/${RuntimeId}/invocations"
+      - RuntimeId: !GetAtt AgentRuntime.AgentRuntimeId
+    Export:
+      Name: !Sub "${AWS::StackName}-RuntimeEndpointUrl"

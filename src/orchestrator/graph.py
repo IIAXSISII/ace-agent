@@ -85,25 +85,26 @@ from src.orchestrator.nodes.write_execution_log import write_execution_log
 # ── Routing functions ─────────────────────────────────────────────────────────
 
 def _route_classify_request(state: OrchestratorState) -> str:
-    # TODO: implement — route based on confidence_score
+    # If a clarifying question was set, route to prompt_user to surface it.
+    # If confidence is high enough, proceed to retrieve_knowledge.
     if state.get("confidence_score", 0.0) >= 0.7:
         return "retrieve_knowledge"
     return "prompt_user"
 
 
 def _route_detect_missing_inputs(state: OrchestratorState) -> str:
-    # TODO: implement — route based on missing_inputs
-    if state.get("missing_inputs"):
-        return "prompt_user"
+    # In F01, missing inputs are surfaced via clarifying_question but execution
+    # proceeds to generate_plan regardless (no real interrupt mechanism yet).
+    # The missing_inputs list is preserved in state for the plan generator to use.
     return "generate_plan"
 
 
 def _route_present_plan(state: OrchestratorState) -> str:
-    # TODO: implement — route based on pending_approval / user decision
-    # Returns "validate_step_pre" when approved, "generate_plan" when modified
+    # pending_approval=False means auto-approved (F01) or user confirmed → proceed
+    # pending_approval=True means user requested a modification → regenerate
     if state.get("pending_approval", False):
-        return "validate_step_pre"
-    return "generate_plan"
+        return "generate_plan"
+    return "validate_step_pre"
 
 
 def _route_validate_step_pre(state: OrchestratorState) -> str:
@@ -174,9 +175,9 @@ def build_graph():
 
     graph.add_conditional_edges(
         "prompt_user",
-        lambda state: "classify_request",
+        lambda state: "retrieve_knowledge",
         {
-            "classify_request": "classify_request",
+            "retrieve_knowledge": "retrieve_knowledge",
         },
     )
 

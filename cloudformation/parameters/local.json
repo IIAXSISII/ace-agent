@@ -12,6 +12,42 @@
     "ParameterValue": "vpc-00000000000000000"
   },
   {
+    "ParameterKey": "SubnetIds",
+    "ParameterValue": "subnet-00000000000000000,subnet-00000000000000001"
+  },
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "10.0.0.0/16"
+  },
+  {
+    "ParameterKey": "BedrockModelId",
+    "ParameterValue": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  },
+  {
+    "ParameterKey": "OrchestratorImageUri",
+    "ParameterValue": "000000000000.dkr.ecr.us-east-1.amazonaws.com/ace-agent-orchestrator:local"
+  },
+  {
+    "ParameterKey": "NetworkingStackName",
+    "ParameterValue": "ace-agent-foundation-networking-local"
+  },
+  {
+    "ParameterKey": "IdentityStackName",
+    "ParameterValue": "ace-agent-foundation-identity-local"
+  },
+  {
+    "ParameterKey": "GuardrailsStackName",
+    "ParameterValue": "ace-agent-platform-guardrails-local"
+  },
+  {
+    "ParameterKey": "MemoryStackName",
+    "ParameterValue": "ace-agent-platform-memory-local"
+  },
+  {
+    "ParameterKey": "GatewayStackName",
+    "ParameterValue": "ace-agent-platform-gateway-local"
+  },
+  {
     "ParameterKey": "OtelExporterEndpoint",
     "ParameterValue": "http://localhost:4317"
   },

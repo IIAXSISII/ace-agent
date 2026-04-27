@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Application Orchestrator Stack.
+  Provisions the AgentCore Runtime endpoint for the Orchestrator container.
+  Consumes networking, identity, guardrails, memory, and gateway outputs via
+  Fn::ImportValue. The Orchestrator's dedicated IAM execution role is imported
+  from the identity stack — it must NOT be reused by any sub-agent stack.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - dev
+      - prod
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+  OrchestratorImageUri:
+    Type: String
+    Description: >
+      ECR URI of the ARM64 Orchestrator container image.
+      Format: <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-5-sonnet-20241022-v2:0
+    Description: Bedrock model ID for the Orchestrator LLM
+
+  NetworkingStackName:
+    Type: String
+    Description: >
+      Name of the deployed networking stack.
+      Used to construct Fn::ImportValue references for VpcId, SubnetIds,
+      and AgentSecurityGroupId.
+    Default: ace-agent-foundation-networking-production
+
+  IdentityStackName:
+    Type: String
+    Description: >
+      Name of the deployed identity stack.
+      Used to construct Fn::ImportValue reference for OrchestratorExecutionRoleArn.
+      The imported role is the Orchestrator's dedicated role — never shared with
+      any sub-agent stack.
+    Default: ace-agent-foundation-identity-production
+
+  GuardrailsStackName:
+    Type: String
+    Description: >
+      Name of the deployed guardrails stack.
+      Used to construct Fn::ImportValue reference for GuardrailId.
+    Default: ace-agent-platform-guardrails-production
+
+  MemoryStackName:
+    Type: String
+    Description: >
+      Name of the deployed memory stack.
+      Used to construct Fn::ImportValue references for ShortTermMemoryStoreId
+      and LongTermMemoryStoreId.
+    Default: ace-agent-platform-memory-production
+
+  GatewayStackName:
+    Type: String
+    Description: >
+      Name of the deployed gateway stack.
+      Used to construct Fn::ImportValue references for GatewayEndpointUrl
+      and GatewayId.
+    Default: ace-agent-platform-gateway-production
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── AgentCore Runtime Endpoint ────────────────────────────────────────────────
+  # Deploys the Orchestrator container on AgentCore Runtime (Firecracker, ARM64).
+  # ExecutionRoleArn is imported from the identity stack — this is the
+  # Orchestrator's dedicated role and must NOT be referenced by any sub-agent stack.
+  # cfn-lint W3001 justification: AWS::BedrockAgentCore::Runtime is a new
+  # resource type that may not yet be in the cfn-lint registry; the resource
+  # schema is valid per the CloudFormation Template Reference.
+  OrchestratorRuntimeEndpoint:
+    Type: AWS::BedrockAgentCore::Runtime
+    # cfn-lint: disable=W3001
+    Properties:
+      # AgentRuntimeName must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$
+      AgentRuntimeName: !Sub "${Application}_${Environment}_orchestrator"
+      Description: !Sub >
+        ACE Agent Orchestrator runtime for ${Environment}.
+        ARM64 container serving POST /invocations and GET /ping.
+      RoleArn:
+        Fn::ImportValue: !Sub "${IdentityStackName}-OrchestratorExecutionRoleArn"
+      AgentRuntimeArtifact:
+        ContainerConfiguration:
+          ContainerUri: !Ref OrchestratorImageUri
+      NetworkConfiguration:
+        NetworkMode: VPC
+        NetworkModeConfig:
+          SecurityGroups:
+            - Fn::ImportValue: !Sub "${NetworkingStackName}-AgentSecurityGroupId"
+          Subnets: !Split
+            - ","
+            - Fn::ImportValue: !Sub "${NetworkingStackName}-SubnetIds"
+      EnvironmentVariables:
+        # Bedrock Guardrails — PII masking, injection blocking, content safety
+        BEDROCK_GUARDRAIL_ID:
+          Fn::ImportValue: !Sub "${GuardrailsStackName}-GuardrailId"
+        # AgentCore Memory — short-term session checkpointing
+        AGENTCORE_MEMORY_STORE_ID:
+          Fn::ImportValue: !Sub "${MemoryStackName}-ShortTermMemoryStoreId"
+        # AgentCore Memory — long-term cross-session semantic retrieval
+        AGENTCORE_LONG_TERM_MEMORY_STORE_ID:
+          Fn::ImportValue: !Sub "${MemoryStackName}-LongTermMemoryStoreId"
+        # AgentCore Gateway — MCP tool discovery endpoint
+        AGENTCORE_GATEWAY_URL:
+          Fn::ImportValue: !Sub "${GatewayStackName}-GatewayEndpointUrl"
+        # Bedrock model selection
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        # Prevent AgentCore Runtime's built-in ADOT from conflicting with the
+        # agent's own OTEL instrumentation (see tech.md DISABLE_ADOT_OBSERVABILITY)
+        DISABLE_ADOT_OBSERVABILITY: "true"
+        # Activate the production ADOT Collector pipeline
+        OTEL_STACK: production
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+        Stack: !Ref AWS::StackName
+
+  # ── SSM Parameters ────────────────────────────────────────────────────────────
+  RuntimeEndpointArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/agents/orchestrator/runtime-endpoint-arn"
+      Type: String
+      Value: !GetAtt OrchestratorRuntimeEndpoint.AgentRuntimeArn
+      Description: AgentCore Runtime ARN for the Orchestrator
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+  RuntimeEndpointUrlParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/agents/orchestrator/runtime-endpoint-url"
+      Type: String
+      Value: !Sub
+        - "https://bedrock-agentcore.${AWS::Region}.amazonaws.com/runtimes/${RuntimeId}/invocations"
+        - RuntimeId: !GetAtt OrchestratorRuntimeEndpoint.AgentRuntimeId
+      Description: >
+        HTTPS invocation URL for the Orchestrator AgentCore Runtime endpoint.
+        Format: https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<id>/invocations
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  RuntimeEndpointArn:
+    Description: ARN of the Orchestrator AgentCore Runtime endpoint
+    Value: !GetAtt OrchestratorRuntimeEndpoint.AgentRuntimeArn
+    Export:
+      Name: !Sub "${AWS::StackName}-RuntimeEndpointArn"
+
+  RuntimeEndpointUrl:
+    Description: >
+      HTTPS invocation URL for the Orchestrator AgentCore Runtime endpoint.
+      Format: https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<id>/invocations
+    Value: !Sub
+      - "https://bedrock-agentcore.${AWS::Region}.amazonaws.com/runtimes/${RuntimeId}/invocations"
+      - RuntimeId: !GetAtt OrchestratorRuntimeEndpoint.AgentRuntimeId
+    Export:
+      Name: !Sub "${AWS::StackName}-RuntimeEndpointUrl"

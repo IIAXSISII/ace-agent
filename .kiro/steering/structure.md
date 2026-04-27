@@ -81,7 +81,7 @@ inclusion: always
 │   └── Makefile                  # Convenience targets wrapping scripts/
 ├── grafana/
 │   └── dashboards/               # Pre-built Grafana dashboard JSON definitions (local docker-compose only — not deployed to AWS)
-├── docker-compose.yml            # Local observability stack (Chainlit, ADOT Collector, Jaeger, Langfuse, VictoriaMetrics, Grafana)
+├── docker-compose.yml            # Local observability stack (Chainlit, ADOT Collector, VictoriaTraces, Langfuse, VictoriaMetrics, Grafana)
 └── .kiro/
     ├── specs/                    # Kiro spec files
     └── steering/                 # Steering rules for AI assistants

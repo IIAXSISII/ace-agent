@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Foundation Networking Stack.
+  Provisions the Agent Security Group for private AWS service access via VPC endpoints.
+  VPC Interface Endpoints (bedrock-runtime, bedrock-agent-runtime, secretsmanager, xray, logs)
+  and Gateway Endpoints (dynamodb, s3) must be created manually before deploying this stack.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - dev
+      - prod
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: >
+      VPC ID where the agent Security Group will be created.
+      Must be provided for all environments — never hardcoded.
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-delimited list of subnet IDs where agent containers will run.
+      Must be provided for all environments — never hardcoded.
+
+  VpcCidr:
+    Type: String
+    Description: >
+      CIDR block of the VPC. Used as the egress destination for the Security Group
+      so traffic to all VPC endpoints stays within the VPC without enumerating
+      individual endpoint IDs.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Agent Security Group ─────────────────────────────────────────────────────
+  # HTTPS (port 443) egress to VPC CIDR only — covers all VPC endpoints.
+  # No inbound rules — agent containers are invoked by AgentCore Runtime internally.
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for ${Application} ${Environment} agent containers - HTTPS egress to VPC endpoints only"
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+          Description: HTTPS egress to VPC CIDR (covers all VPC endpoints)
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: application
+          Value: !Ref Application
+        - Key: created-with
+          Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── SSM Parameters ───────────────────────────────────────────────────────────
+  VpcIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/networking/vpc-id"
+      Type: String
+      Value: !Ref VpcId
+      Description: VPC ID for the agent networking stack
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+  SubnetIdsParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/networking/subnet-ids"
+      Type: String
+      Value: !Join [",", !Ref SubnetIds]
+      Description: Comma-delimited subnet IDs for agent containers
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+  AgentSecurityGroupIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/networking/agent-security-group-id"
+      Type: String
+      Value: !GetAtt AgentSecurityGroup.GroupId
+      Description: Security Group ID for agent containers
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  VpcId:
+    Description: VPC ID passed through from parameters
+    Value: !Ref VpcId
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+
+  SubnetIds:
+    Description: Comma-delimited subnet IDs passed through from parameters
+    Value: !Join [",", !Ref SubnetIds]
+    Export:
+      Name: !Sub "${AWS::StackName}-SubnetIds"
+
+  AgentSecurityGroupId:
+    Description: Security Group ID for agent containers
+    Value: !GetAtt AgentSecurityGroup.GroupId
+    Export:
+      Name: !Sub "${AWS::StackName}-AgentSecurityGroupId"

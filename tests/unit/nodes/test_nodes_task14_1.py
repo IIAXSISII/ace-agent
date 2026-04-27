@@ -10,7 +10,6 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 os.environ.setdefault("MOCK_STORAGE", "true")
 os.environ.setdefault("MOCK_PROMPTS", "true")
@@ -276,7 +275,7 @@ class TestRetrieveKnowledge:
         assert result["task_category"] == "monitoring_query"
 
     def test_falls_back_to_fixtures_when_retriever_raises(self, monkeypatch):
-        from src.orchestrator.nodes.retrieve_knowledge import retrieve_knowledge, FIXTURE_DOCS
+        from src.orchestrator.nodes.retrieve_knowledge import FIXTURE_DOCS
         monkeypatch.setenv("KNOWLEDGE_BASE_ID", "kb-test-123")
         # Stub AmazonKnowledgeBasesRetriever inside the module
         mock_retriever_cls = MagicMock()
@@ -527,7 +526,7 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state(pending_approval=False)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_pending_approval_already_false_before_call(self):
         # Property 8: before present_plan runs, pending_approval is False
@@ -535,14 +534,14 @@ class TestPresentPlan:
         state = _base_state(pending_approval=False)
         assert state["pending_approval"] is False
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_property8_idempotent_when_already_true(self):
         # Property 8: calling present_plan when already approved keeps it True
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state(pending_approval=True)
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved
 
     def test_state_fields_preserved(self):
         # present_plan must not drop any state fields
@@ -572,4 +571,4 @@ class TestPresentPlan:
         from src.orchestrator.nodes.present_plan import present_plan
         state = _base_state()
         result = present_plan(state)
-        assert result["pending_approval"] is True
+        assert result["pending_approval"] is False  # F01: auto-approved

@@ -1,0 +1,62 @@
+[
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "prod"
+  },
+  {
+    "ParameterKey": "Application",
+    "ParameterValue": "ace-agent"
+  },
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-03bc65d44dbdbfe45"
+  },
+  {
+    "ParameterKey": "SubnetIds",
+    "ParameterValue": "subnet-04ca1e016d4518683"
+  },
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "10.132.0.0/16"
+  },
+  {
+    "ParameterKey": "BedrockModelId",
+    "ParameterValue": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+    "ParameterKey": "OrchestratorImageUri",
+    "ParameterValue": "<REPLACE_WITH_ECR_IMAGE_URI>"
+  },
+  {
+    "ParameterKey": "NetworkingStackName",
+    "ParameterValue": "ace-agent-foundation-networking-prod"
+  },
+  {
+    "ParameterKey": "IdentityStackName",
+    "ParameterValue": "ace-agent-foundation-identity-prod"
+  },
+  {
+    "ParameterKey": "GuardrailsStackName",
+    "ParameterValue": "ace-agent-platform-guardrails-prod"
+  },
+  {
+    "ParameterKey": "MemoryStackName",
+    "ParameterValue": "ace-agent-platform-memory-prod"
+  },
+  {
+    "ParameterKey": "GatewayStackName",
+    "ParameterValue": "ace-agent-platform-gateway-prod"
+  },
+  {
+    "ParameterKey": "OtelExporterEndpoint",
+    "ParameterValue": "<REPLACE_WITH_AGENTCORE_OBSERVABILITY_ENDPOINT>"
+  },
+  {
+    "ParameterKey": "MockSubAgents",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "TokenBudgetLimit",
+    "ParameterValue": "200000"
+  }
+]

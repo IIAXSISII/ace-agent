@@ -82,7 +82,7 @@ graph TB
         LF[Langfuse - local docker-compose only]
         VMOBS[VictoriaMetrics - local docker-compose only]
         GRAF[Grafana - local docker-compose only]
-        JAEGER[Jaeger - local docker-compose only]
+        VT[VictoriaTraces - local docker-compose only]
     end
 
     subgraph Identity["AgentCore Identity"]
@@ -648,12 +648,12 @@ AgentCore ships a built-in managed Observability service (GA October 2025) power
 No self-hosted observability infrastructure is deployed to AWS.
 
 **Layer 2 — Local dev only (docker-compose)**
-Langfuse, VictoriaMetrics, and Grafana run exclusively in the local `docker-compose` stack. They are **not deployed to AWS** in any environment.
+Langfuse, VictoriaMetrics, VictoriaTraces, and Grafana run exclusively in the local `docker-compose` stack. They are **not deployed to AWS** in any environment.
 
-- **Jaeger** (local, port 16686): distributed trace UI for multi-hop debugging across Orchestrator + Sub-Agents running locally.
+- **VictoriaTraces** (local, port 9428): distributed trace storage and UI for multi-hop debugging across Orchestrator + Sub-Agents running locally. Exposes Jaeger-compatible query API consumed by Grafana.
 - **Langfuse** (local, port 3000): captures every LLM prompt, completion, tool call, token count, latency, and RAG metric score during local development.
-- **VictoriaMetrics** (local, port 9090): replaces standalone Prometheus — Prometheus-compatible scraping and storage, lighter footprint, PromQL-compatible. Grafana connects to it using the standard Prometheus datasource type.
-- **Grafana** (local, port 3001): unified dashboards pre-wired to Jaeger, Langfuse, and VictoriaMetrics.
+- **VictoriaMetrics** (local, port 9091): replaces standalone Prometheus — Prometheus-compatible scraping and storage, lighter footprint, PromQL-compatible. Grafana connects to it using the standard Prometheus datasource type.
+- **Grafana** (local, port 3001): unified dashboards pre-wired to VictoriaTraces, Langfuse, and VictoriaMetrics.
 
 The `DISABLE_ADOT_OBSERVABILITY` environment variable on AgentCore Runtime deployments prevents the runtime's built-in ADOT from conflicting with the agent's own OTEL instrumentation — verify the exact variable name against current AgentCore Runtime documentation before deployment.
 
@@ -1316,18 +1316,12 @@ exporters:
   # Production: X-Ray for traces (ADOT awsxray exporter handles X-Ray segment format)
   awsxray:
     region: ${AWS_REGION}
-  # Local: Jaeger for distributed traces (multi-hop debugging)
-  jaeger:
-    endpoint: jaeger:14250
-  # Local: Langfuse for LLM traces (via OTLP)
-  otlphttp/langfuse:
-    endpoint: ${LANGFUSE_BASE_URL}/api/public/otel
-    headers:
-      Authorization: "Basic ${LANGFUSE_BASIC_AUTH}"
-      x-langfuse-ingestion-version: "4"
+  # Local: VictoriaTraces for distributed traces (multi-hop debugging)
+  otlphttp/victoriatraces:
+    endpoint: http://victoriatraces:10428/insert/opentelemetry
   # Local: VictoriaMetrics for metrics (Prometheus-compatible, replaces standalone Prometheus)
   prometheusremotewrite:
-    endpoint: http://victoriametrics:9090/api/v1/write
+    endpoint: http://victoriametrics:8428/api/v1/write
 
 service:
   pipelines:
@@ -1336,9 +1330,9 @@ service:
       exporters: [awsxray]          # Production: X-Ray only — AgentCore Observability handles the rest
     traces/local:
       receivers: [otlp]
-      exporters: [jaeger, otlphttp/langfuse]
+      exporters: [otlphttp/victoriatraces]
     metrics/local:
-      receivers: [otlp]
+      receivers: [otlp, prometheus]
       exporters: [prometheusremotewrite]
 ```
 
@@ -1386,14 +1380,14 @@ The same container image (built for **ARM64**) is deployed to AgentCore Runtime 
 | Concern | Local | Production |
 |---|---|---|
 | Runtime host | `uvicorn` on your machine | AgentCore Runtime (Firecracker VM) |
-| Distributed traces | ADOT → local Jaeger (:16686) | ADOT → AWS X-Ray |
+| Distributed traces | ADOT → local VictoriaTraces (:9428) | ADOT → AWS X-Ray |
 | LLM (Claude) | Bedrock API (needs `~/.aws/credentials`) | Bedrock API via AgentCore Identity |
 | AgentCore Memory | LangGraph `MemorySaver` (in-memory checkpointer, no AWS creds needed) | `AgentCoreMemorySaver` + `AgentCoreMemoryStore` (managed service) |
 | Tool calls | Sub-agents call external APIs directly (no Gateway) or use mock `BaseTool` implementations | AgentCore Gateway (MCP) |
 | AgentCore Identity / Auth | Chainlit auth disabled; secrets from `.env` file | AgentCore Identity + Secrets Manager; Chainlit OAuth via IdP |
 | Guardrails | Bedrock Guardrails (needs AWS creds) or bypass flag | Bedrock Guardrails |
 | Secrets | `.env` file or environment variables | AWS Secrets Manager via AgentCore Identity |
-| Observability | docker-compose stack (Jaeger, Langfuse, VictoriaMetrics, Grafana) | AgentCore Observability — all features enabled (Runtime + Memory + Gateway + X-Ray + CloudWatch Logs) |
+| Observability | docker-compose stack (VictoriaTraces, Langfuse, VictoriaMetrics, Grafana) | AgentCore Observability — all features enabled (Runtime + Memory + Gateway + X-Ray + CloudWatch Logs) |
 For Bedrock API calls (LLM, Guardrails, Knowledge Bases) locally, standard `~/.aws/credentials` with appropriate permissions is all that's needed — no special AgentCore setup.
 
 ### Local Service Substitutions
@@ -1430,12 +1424,12 @@ The repository includes a `docker-compose.yml` at the repo root that starts the 
 # docker-compose.yml (structure)
 services:
   chainlit:          # Chat UI on :8000 — connects to orchestrator on :8080
-  otel-collector:    # Receives ADOT telemetry from agents on :4317, fans out to Jaeger + VictoriaMetrics + Langfuse
-  jaeger:            # Distributed traces UI on :16686 — multi-hop debugging across Orchestrator + Sub-Agents
+  otel-collector:    # Receives ADOT telemetry from agents on :4317, fans out to VictoriaTraces + VictoriaMetrics
+  victoriatraces:    # Distributed traces UI on :9428 — multi-hop debugging across Orchestrator + Sub-Agents
   langfuse:          # LLM traces UI on :3000 — prompts, completions, tool calls, token usage
   langfuse-db:       # PostgreSQL backend for Langfuse
   victoriametrics:   # Metrics storage + scraping on :9090 — replaces Prometheus (PromQL compatible)
-  grafana:           # Unified dashboards on :3001 (pre-wired to Jaeger, Langfuse, VictoriaMetrics)
+  grafana:           # Unified dashboards on :3001 (pre-wired to VictoriaTraces, Langfuse, VictoriaMetrics)
 ```
 
 ### Full Developer Workflow
@@ -1458,7 +1452,7 @@ uvicorn src.orchestrator.main:app --port 8080 --reload
 uvicorn src.agents.confluence.agent:app --port 8081 --reload
 
 # 5. Open Chainlit UI at http://localhost:8000
-# 6. View traces at http://localhost:16686 (Jaeger)
+# 6. View traces at http://localhost:9428 (VictoriaTraces)
 # 7. View LLM traces at http://localhost:3000 (Langfuse)
 # 8. View metrics at http://localhost:3001 (Grafana)
 ```

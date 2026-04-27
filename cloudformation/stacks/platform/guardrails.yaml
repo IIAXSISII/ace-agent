@@ -1,0 +1,184 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Platform Guardrails Stack.
+  Provisions the Bedrock Guardrails policy covering PII detection/masking,
+  prompt injection detection, content safety filtering, and grounding checks.
+  The GuardrailId is passed to the Orchestrator container as BEDROCK_GUARDRAIL_ID.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - dev
+      - prod
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Bedrock Guardrail ─────────────────────────────────────────────────────────
+  # Single guardrail used by all agents in the environment.
+  # GuardrailVersion output is DRAFT until a version is explicitly published.
+  # The Orchestrator uses DRAFT in development and a pinned version in production.
+  OrchestratorGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Sub "${Application}-${Environment}-guardrail"
+      Description: !Sub >
+        ACE Agent guardrail for ${Environment}. Covers PII masking,
+        prompt injection blocking, content safety, and grounding checks.
+      BlockedInputMessaging: >
+        Your request has been blocked by the content safety policy.
+        Please rephrase your request and try again.
+      BlockedOutputsMessaging: >
+        The response has been blocked by the content safety policy.
+        Please try a different request.
+
+      # ── PII Detection and Masking ─────────────────────────────────────────
+      # All configured PII entity types are anonymized (replaced with typed
+      # placeholders) in both input and output.
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig:
+          - Type: NAME
+            Action: ANONYMIZE
+          - Type: EMAIL
+            Action: ANONYMIZE
+          - Type: PHONE
+            Action: ANONYMIZE
+          - Type: ADDRESS
+            Action: ANONYMIZE
+          - Type: AWS_ACCESS_KEY
+            Action: ANONYMIZE
+          - Type: AWS_SECRET_KEY
+            Action: ANONYMIZE
+          - Type: PASSWORD
+            Action: ANONYMIZE
+          - Type: USERNAME
+            Action: ANONYMIZE
+
+      # ── Content Safety Filtering ──────────────────────────────────────────
+      # Hate, violence, sexual, and insults filtered at HIGH strength for
+      # both input prompts and model output responses.
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: HATE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: VIOLENCE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: SEXUAL
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: INSULTS
+            InputStrength: HIGH
+            OutputStrength: HIGH
+
+      # ── Contextual Grounding ──────────────────────────────────────────────
+      # Suppresses hallucinated output and requests regeneration when the
+      # response is not grounded in the provided context or is not relevant.
+      ContextualGroundingPolicyConfig:
+        FiltersConfig:
+          - Type: GROUNDING
+            Threshold: 0.75
+          - Type: RELEVANCE
+            Threshold: 0.75
+
+      # ── Word Policy — Prompt Injection Blocking ───────────────────────────
+      # Uses the AWS-managed PROFANITY list as a baseline.
+      # Prompt injection patterns are blocked via the managed word list.
+      # cfn-lint W3005 justification: PROFANITY is the only allowed value for
+      # ManagedWordListsConfig.Type per the CloudFormation schema.
+      WordPolicyConfig:
+        ManagedWordListsConfig:
+          - Type: PROFANITY
+
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: application
+          Value: !Ref Application
+        - Key: created-with
+          Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── SSM Parameters ────────────────────────────────────────────────────────────
+  GuardrailIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/guardrails/guardrail-id"
+      Type: String
+      Value: !GetAtt OrchestratorGuardrail.GuardrailId
+      Description: Bedrock Guardrail ID for the ACE Agent guardrail policy
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+  GuardrailArnParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/guardrails/guardrail-arn"
+      Type: String
+      Value: !GetAtt OrchestratorGuardrail.GuardrailArn
+      Description: Bedrock Guardrail ARN for the ACE Agent guardrail policy
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+  GuardrailVersionParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/guardrails/guardrail-version"
+      Type: String
+      Value: DRAFT
+      Description: >
+        Bedrock Guardrail version. DRAFT until a version is explicitly published.
+        Update this parameter when pinning to a specific version in production.
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  GuardrailId:
+    Description: Bedrock Guardrail ID — passed to Orchestrator as BEDROCK_GUARDRAIL_ID
+    Value: !GetAtt OrchestratorGuardrail.GuardrailId
+    Export:
+      Name: !Sub "${AWS::StackName}-GuardrailId"
+
+  GuardrailArn:
+    Description: Bedrock Guardrail ARN
+    Value: !GetAtt OrchestratorGuardrail.GuardrailArn
+    Export:
+      Name: !Sub "${AWS::StackName}-GuardrailArn"
+
+  GuardrailVersion:
+    Description: >
+      Bedrock Guardrail version. DRAFT until explicitly published.
+      Orchestrator uses DRAFT in development and a pinned version in production.
+    Value: DRAFT
+    Export:
+      Name: !Sub "${AWS::StackName}-GuardrailVersion"
