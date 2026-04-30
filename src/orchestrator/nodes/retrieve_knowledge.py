@@ -81,7 +81,68 @@ def _compute_rag_metrics(
     return precision_at_k, recall_at_k
 
 
-def retrieve_knowledge(state: "OrchestratorState") -> "OrchestratorState":
+def _filter_docs_by_threshold(
+    docs: list[Document],
+    threshold: float,
+    span: object,
+) -> list[Document]:
+    """Filter docs below relevance threshold, emitting OTEL span events for excluded docs."""
+    included: list[Document] = []
+    for doc in docs:
+        score = doc.metadata.get("relevance_score", 1.0)
+        if score >= threshold:
+            included.append(doc)
+        else:
+            span.add_event(  # type: ignore[attr-defined]
+                "doc_excluded",
+                attributes={
+                    "doc_id": doc.metadata.get("source", doc.metadata.get("url", "unknown")),
+                    "score": float(score),
+                    "threshold": float(threshold),
+                },
+            )
+    if not included and docs:
+        span.add_event(  # type: ignore[attr-defined]
+            "all_docs_excluded",
+            attributes={"threshold": float(threshold), "docs_retrieved": len(docs)},
+        )
+    return included
+
+
+def _build_citations(docs: list[Document], now_iso: str) -> list[dict]:
+    """Build citation dicts from document metadata."""
+    citations = []
+    for doc in docs:
+        meta = doc.metadata or {}
+        title = meta.get("title") or meta.get("source", "unknown")
+        url = meta.get("url") or meta.get("source", "unknown")
+        citations.append({"title": title, "url": url, "timestamp": now_iso})
+    return citations
+
+
+def _set_span_attributes(
+    span: object,
+    query_hash: str,
+    top_k: int,
+    docs_retrieved: int,
+    docs_included: int,
+    reranker_applied: bool,
+    precision_at_k: float | None,
+    recall_at_k: float | None,
+) -> None:
+    """Set all RAG-related OTEL span attributes."""
+    span.set_attribute("rag.query_hash", query_hash)  # type: ignore[attr-defined]
+    span.set_attribute("rag.k", top_k)  # type: ignore[attr-defined]
+    span.set_attribute("rag.docs_retrieved", docs_retrieved)  # type: ignore[attr-defined]
+    span.set_attribute("rag.docs_included", docs_included)  # type: ignore[attr-defined]
+    span.set_attribute("rag.reranker_applied", reranker_applied)  # type: ignore[attr-defined]
+    if precision_at_k is not None:
+        span.set_attribute("rag.precision_at_k", precision_at_k)  # type: ignore[attr-defined]
+    if recall_at_k is not None:
+        span.set_attribute("rag.recall_at_k", recall_at_k)  # type: ignore[attr-defined]
+
+
+def retrieve_knowledge(state: "OrchestratorState") -> "OrchestratorState":  # noqa: C901
     import opentelemetry.trace as otel_trace
 
     knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
@@ -92,121 +153,68 @@ def retrieve_knowledge(state: "OrchestratorState") -> "OrchestratorState":
     query = state.get("raw_request", "")
     initial_cw = list(state.get("context_window") or [])
     now_iso = datetime.now(timezone.utc).isoformat()
+    query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
 
     tracer = otel_trace.get_tracer(__name__)
 
     with tracer.start_as_current_span("knowledge.retrieve") as span:
-        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
-
         if knowledge_base_id:
-            try:
-                from src.rag.retriever import build_kb_retriever
+            return _retrieve_from_kb(
+                state, span, knowledge_base_id, query, initial_cw, now_iso,
+                query_hash, top_k, threshold, reranker_enabled,
+            )
 
-                retriever = build_kb_retriever(
-                    knowledge_base_id,
-                    top_k=top_k,
-                    reranker_enabled=reranker_enabled,
-                )
+        # Mock path — fixture docs, no threshold, no metrics
+        docs = list(FIXTURE_DOCS)
+        citations = _build_citations(docs, now_iso)
+        _set_span_attributes(span, query_hash, top_k, len(docs), len(docs), False, None, None)
+        return {**state, "context_window": initial_cw + docs, "citations": citations}
 
-                invoke_config: dict = {}
-                if os.getenv("OTEL_STACK") == "local":
-                    from src.observability.langfuse import get_langfuse_handler
-                    handler = get_langfuse_handler()
-                    if handler:
-                        invoke_config = {"callbacks": [handler]}
 
-                docs = retriever.invoke(query, config=invoke_config) if invoke_config else retriever.invoke(query)
+def _retrieve_from_kb(
+    state: "OrchestratorState",
+    span: object,
+    knowledge_base_id: str,
+    query: str,
+    initial_cw: list,
+    now_iso: str,
+    query_hash: str,
+    top_k: int,
+    threshold: float,
+    reranker_enabled: bool,
+) -> "OrchestratorState":
+    """KB retrieval path — called when KNOWLEDGE_BASE_ID is set."""
+    try:
+        from src.rag.retriever import build_kb_retriever
 
-                # Apply relevance threshold filter
-                included_docs: list[Document] = []
-                for doc in docs:
-                    score = doc.metadata.get("relevance_score", 1.0)
-                    if score >= threshold:
-                        included_docs.append(doc)
-                    else:
-                        span.add_event(
-                            "doc_excluded",
-                            attributes={
-                                "doc_id": doc.metadata.get("source", doc.metadata.get("url", "unknown")),
-                                "score": float(score),
-                                "threshold": float(threshold),
-                            },
-                        )
+        retriever = build_kb_retriever(knowledge_base_id, top_k=top_k, reranker_enabled=reranker_enabled)
 
-                if not included_docs and docs:
-                    span.add_event(
-                        "all_docs_excluded",
-                        attributes={
-                            "threshold": float(threshold),
-                            "docs_retrieved": len(docs),
-                        },
-                    )
+        invoke_config: dict = {}
+        if os.getenv("OTEL_STACK") == "local":
+            from src.observability.langfuse import get_langfuse_handler
+            handler = get_langfuse_handler()
+            if handler:
+                invoke_config = {"callbacks": [handler]}
 
-                # Build scored_docs for metric computation
-                scored_docs: list[tuple[Document, float]] = [
-                    (doc, float(doc.metadata.get("relevance_score", 1.0)))
-                    for doc in included_docs
-                ]
+        docs = retriever.invoke(query, config=invoke_config) if invoke_config else retriever.invoke(query)
+        included_docs = _filter_docs_by_threshold(docs, threshold, span)
 
-                # Compute RAG metrics (only when reranker is enabled)
-                precision_at_k: float | None = None
-                recall_at_k: float | None = None
-                if reranker_enabled:
-                    precision_at_k, recall_at_k = _compute_rag_metrics(scored_docs, threshold, top_k)
+        scored_docs: list[tuple[Document, float]] = [
+            (doc, float(doc.metadata.get("relevance_score", 1.0))) for doc in included_docs
+        ]
+        precision_at_k: float | None = None
+        recall_at_k: float | None = None
+        if reranker_enabled:
+            precision_at_k, recall_at_k = _compute_rag_metrics(scored_docs, threshold, top_k)
 
-                # Build citations
-                citations = []
-                for doc in included_docs:
-                    meta = doc.metadata or {}
-                    title = meta.get("title") or meta.get("source", "unknown")
-                    url = meta.get("url") or meta.get("source", "unknown")
-                    citations.append({"title": title, "url": url, "timestamp": now_iso})
+        citations = _build_citations(included_docs, now_iso)
+        _set_span_attributes(span, query_hash, top_k, len(docs), len(included_docs), reranker_enabled, precision_at_k, recall_at_k)
 
-                # Set OTEL span attributes
-                span.set_attribute("rag.query_hash", query_hash)
-                span.set_attribute("rag.k", top_k)
-                span.set_attribute("rag.docs_retrieved", len(docs))
-                span.set_attribute("rag.docs_included", len(included_docs))
-                span.set_attribute("rag.reranker_applied", reranker_enabled)
-                if precision_at_k is not None:
-                    span.set_attribute("rag.precision_at_k", precision_at_k)
-                if recall_at_k is not None:
-                    span.set_attribute("rag.recall_at_k", recall_at_k)
+        return {**state, "context_window": initial_cw + included_docs, "citations": citations}
 
-                return {
-                    **state,
-                    "context_window": initial_cw + included_docs,
-                    "citations": citations,
-                }
-
-            except Exception as exc:
-                error = {"type": exc.__class__.__name__, "message": str(exc)}
-                span.add_event(
-                    "kb_retrieval_error",
-                    attributes={"error_type": exc.__class__.__name__, "error_message": str(exc)},
-                )
-                return {**state, "error": error}
-
-        else:
-            # Mock path — fixture docs, no threshold, no metrics
-            docs = list(FIXTURE_DOCS)
-            citations = [
-                {
-                    "title": doc.metadata.get("title", "unknown"),
-                    "url": doc.metadata.get("url", "unknown"),
-                    "timestamp": now_iso,
-                }
-                for doc in docs
-            ]
-
-            span.set_attribute("rag.query_hash", query_hash)
-            span.set_attribute("rag.k", top_k)
-            span.set_attribute("rag.docs_retrieved", len(docs))
-            span.set_attribute("rag.docs_included", len(docs))
-            span.set_attribute("rag.reranker_applied", False)
-
-            return {
-                **state,
-                "context_window": initial_cw + docs,
-                "citations": citations,
-            }
+    except Exception as exc:
+        span.add_event(  # type: ignore[attr-defined]
+            "kb_retrieval_error",
+            attributes={"error_type": exc.__class__.__name__, "error_message": str(exc)},
+        )
+        return {**state, "error": {"type": exc.__class__.__name__, "message": str(exc)}}
