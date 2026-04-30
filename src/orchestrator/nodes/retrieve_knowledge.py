@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import os
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
@@ -61,25 +63,150 @@ FIXTURE_DOCS = [
 ]
 
 
+def _compute_rag_metrics(
+    scored_docs: list[tuple[Document, float]],
+    threshold: float,
+    top_k: int,
+) -> tuple[float, float]:
+    """
+    Compute approximated precision@K and recall@K using reranker scores as
+    a proxy for relevance. A document is 'relevant' if score >= threshold.
+
+    Returns (precision_at_k, recall_at_k).
+    """
+    relevant_in_top_k = sum(1 for _, s in scored_docs[:top_k] if s >= threshold)
+    total_relevant = sum(1 for _, s in scored_docs if s >= threshold)
+    precision_at_k = relevant_in_top_k / top_k if top_k > 0 else 0.0
+    recall_at_k = relevant_in_top_k / total_relevant if total_relevant > 0 else 0.0
+    return precision_at_k, recall_at_k
+
+
 def retrieve_knowledge(state: "OrchestratorState") -> "OrchestratorState":
+    import opentelemetry.trace as otel_trace
+
     knowledge_base_id = os.getenv("KNOWLEDGE_BASE_ID")
+    top_k = int(os.getenv("KB_TOP_K", "5"))
+    threshold = float(os.getenv("KB_RELEVANCE_THRESHOLD", "0.5"))
+    reranker_enabled = os.getenv("RERANKER_ENABLED", "true").lower() == "true"
 
-    if knowledge_base_id:
-        try:
-            from langchain_aws import AmazonKnowledgeBasesRetriever
+    query = state.get("raw_request", "")
+    initial_cw = list(state.get("context_window") or [])
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-            retriever = AmazonKnowledgeBasesRetriever(
-                knowledge_base_id=knowledge_base_id,
-                retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 5}},
-            )
-            query = state.get("raw_request", "")
-            docs = retriever.invoke(query)
-        except Exception:
+    tracer = otel_trace.get_tracer(__name__)
+
+    with tracer.start_as_current_span("knowledge.retrieve") as span:
+        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+
+        if knowledge_base_id:
+            try:
+                from src.rag.retriever import build_kb_retriever
+
+                retriever = build_kb_retriever(
+                    knowledge_base_id,
+                    top_k=top_k,
+                    reranker_enabled=reranker_enabled,
+                )
+
+                invoke_config: dict = {}
+                if os.getenv("OTEL_STACK") == "local":
+                    from src.observability.langfuse import get_langfuse_handler
+                    handler = get_langfuse_handler()
+                    if handler:
+                        invoke_config = {"callbacks": [handler]}
+
+                docs = retriever.invoke(query, config=invoke_config) if invoke_config else retriever.invoke(query)
+
+                # Apply relevance threshold filter
+                included_docs: list[Document] = []
+                for doc in docs:
+                    score = doc.metadata.get("relevance_score", 1.0)
+                    if score >= threshold:
+                        included_docs.append(doc)
+                    else:
+                        span.add_event(
+                            "doc_excluded",
+                            attributes={
+                                "doc_id": doc.metadata.get("source", doc.metadata.get("url", "unknown")),
+                                "score": float(score),
+                                "threshold": float(threshold),
+                            },
+                        )
+
+                if not included_docs and docs:
+                    span.add_event(
+                        "all_docs_excluded",
+                        attributes={
+                            "threshold": float(threshold),
+                            "docs_retrieved": len(docs),
+                        },
+                    )
+
+                # Build scored_docs for metric computation
+                scored_docs: list[tuple[Document, float]] = [
+                    (doc, float(doc.metadata.get("relevance_score", 1.0)))
+                    for doc in included_docs
+                ]
+
+                # Compute RAG metrics (only when reranker is enabled)
+                precision_at_k: float | None = None
+                recall_at_k: float | None = None
+                if reranker_enabled:
+                    precision_at_k, recall_at_k = _compute_rag_metrics(scored_docs, threshold, top_k)
+
+                # Build citations
+                citations = []
+                for doc in included_docs:
+                    meta = doc.metadata or {}
+                    title = meta.get("title") or meta.get("source", "unknown")
+                    url = meta.get("url") or meta.get("source", "unknown")
+                    citations.append({"title": title, "url": url, "timestamp": now_iso})
+
+                # Set OTEL span attributes
+                span.set_attribute("rag.query_hash", query_hash)
+                span.set_attribute("rag.k", top_k)
+                span.set_attribute("rag.docs_retrieved", len(docs))
+                span.set_attribute("rag.docs_included", len(included_docs))
+                span.set_attribute("rag.reranker_applied", reranker_enabled)
+                if precision_at_k is not None:
+                    span.set_attribute("rag.precision_at_k", precision_at_k)
+                if recall_at_k is not None:
+                    span.set_attribute("rag.recall_at_k", recall_at_k)
+
+                return {
+                    **state,
+                    "context_window": initial_cw + included_docs,
+                    "citations": citations,
+                }
+
+            except Exception as exc:
+                error = {"type": exc.__class__.__name__, "message": str(exc)}
+                span.add_event(
+                    "kb_retrieval_error",
+                    attributes={"error_type": exc.__class__.__name__, "error_message": str(exc)},
+                )
+                return {**state, "error": error}
+
+        else:
+            # Mock path — fixture docs, no threshold, no metrics
             docs = list(FIXTURE_DOCS)
-    else:
-        docs = list(FIXTURE_DOCS)
+            citations = [
+                {
+                    "title": doc.metadata.get("title", "unknown"),
+                    "url": doc.metadata.get("url", "unknown"),
+                    "timestamp": now_iso,
+                }
+                for doc in docs
+            ]
 
-    context_window = list(state.get("context_window") or [])
-    context_window.extend(docs)
+            span.set_attribute("rag.query_hash", query_hash)
+            span.set_attribute("rag.k", top_k)
+            span.set_attribute("rag.docs_retrieved", len(docs))
+            span.set_attribute("rag.docs_included", len(docs))
+            span.set_attribute("rag.reranker_applied", False)
 
-    return {**state, "context_window": context_window}
+            return {
+                **state,
+                "context_window": initial_cw + docs,
+                "citations": citations,
+            }

@@ -1,4 +1,5 @@
 [
   {"ParameterKey": "Environment", "ParameterValue": "prod"},
-  {"ParameterKey": "Application", "ParameterValue": "ace-agent"}
+  {"ParameterKey": "Application", "ParameterValue": "ace-agent"},
+  {"ParameterKey": "KnowledgeStackName", "ParameterValue": "ace-agent-platform-knowledge-prod"}
 ]

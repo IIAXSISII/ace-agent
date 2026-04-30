@@ -312,21 +312,20 @@ class TestRetrieveKnowledge:
         assert result["task_category"] == "monitoring_query"
 
     def test_falls_back_to_fixtures_when_retriever_raises(self, monkeypatch):
-        # When KNOWLEDGE_BASE_ID is set but retriever raises, fall back to fixtures
-        from src.orchestrator.nodes.retrieve_knowledge import FIXTURE_DOCS
+        # Req 12.3: When KNOWLEDGE_BASE_ID is set but retriever raises, error is propagated
+        # to state["error"] — no silent fallback to fixtures
         monkeypatch.setenv("KNOWLEDGE_BASE_ID", "kb-test-123")
-        mock_retriever_cls = MagicMock()
-        mock_retriever_cls.return_value.invoke.side_effect = Exception("KB unavailable")
-        with patch.dict(sys.modules, {"langchain_aws": MagicMock(
-            ChatBedrock=MagicMock(),
-            AmazonKnowledgeBasesRetriever=mock_retriever_cls,
-        )}):
-            import importlib
-            import src.orchestrator.nodes.retrieve_knowledge as rk_mod
-            importlib.reload(rk_mod)
+        monkeypatch.setenv("RERANKER_ENABLED", "false")
+        with patch("src.rag.retriever.AmazonKnowledgeBasesRetriever") as mock_cls:
+            mock_cls.return_value.invoke.side_effect = Exception("KB unavailable")
+            from src.orchestrator.nodes.retrieve_knowledge import retrieve_knowledge
             state = minimal_state()
-            result = rk_mod.retrieve_knowledge(state)
-        assert len(result["context_window"]) == len(FIXTURE_DOCS)
+            result = retrieve_knowledge(state)
+        # Error is propagated, context_window is NOT populated with fixtures
+        assert result.get("error") is not None
+        assert result["error"]["type"] == "Exception"
+        assert "KB unavailable" in result["error"]["message"]
+        assert len(result.get("context_window", [])) == 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

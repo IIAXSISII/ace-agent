@@ -319,6 +319,7 @@ flowchart TD
     end
 
     subgraph Platform["Platform Tier — occasionally changes"]
+        KB_STACK[knowledge.yaml<br/>Bedrock KB · S3 source · S3 Vectors]
         GRD[guardrails.yaml<br/>Bedrock Guardrails policy]
         MEM[memory.yaml<br/>AgentCore Memory stores]
         GW[gateway.yaml<br/>AgentCore Gateway]
@@ -330,7 +331,7 @@ flowchart TD
     end
 
     NET --> ID --> DATA --> STOR
-    STOR --> GRD --> MEM --> GW
+    STOR --> KB_STACK --> GRD --> MEM --> GW
     GW --> ORCH_STACK
     GW --> FUTURE_AGENTS
 
@@ -380,6 +381,7 @@ Each CloudFormation stack has its own parameter file under `cloudformation/param
 | `foundation-data-prod.json` | Foundation data — DynamoDB tables |
 | `foundation-storage-prod.json` | Foundation storage — S3 buckets, Athena, Glue |
 | `platform-guardrails-prod.json` | Platform guardrails — Bedrock Guardrails policy |
+| `platform-knowledge-prod.json` | Platform knowledge — Bedrock KB, S3 source bucket, S3 Vectors index |
 | `platform-memory-prod.json` | Platform memory — AgentCore Memory stores |
 | `platform-gateway-prod.json` | Platform gateway — AgentCore Gateway |
 | `application-orchestrator-prod.json` | Application orchestrator — AgentCore Runtime endpoint |

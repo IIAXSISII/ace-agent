@@ -75,6 +75,33 @@ Parameters:
       and GatewayId.
     Default: ace-agent-platform-gateway-production
 
+  KnowledgeStackName:
+    Type: String
+    Default: ace-agent-platform-knowledge-prod
+    Description: >
+      Name of the deployed knowledge stack.
+      Used to import KnowledgeBaseId as KNOWLEDGE_BASE_ID env var.
+
+  KbTopK:
+    Type: String
+    Default: "5"
+    Description: Number of candidate documents to retrieve before reranking
+
+  KbRelevanceThreshold:
+    Type: String
+    Default: "0.5"
+    Description: Minimum reranker score for a document to enter the context window
+
+  RerankerEnabled:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: >
+      When true, wraps KB retriever with CrossEncoderReranker.
+      Set to false for local dev without sentence-transformers.
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Resources
@@ -130,6 +157,12 @@ Resources:
         DISABLE_ADOT_OBSERVABILITY: "true"
         # Activate the production ADOT Collector pipeline
         OTEL_STACK: production
+        # Bedrock Knowledge Base — RAG pipeline
+        KNOWLEDGE_BASE_ID:
+          Fn::ImportValue: !Sub "${KnowledgeStackName}-KnowledgeBaseId"
+        KB_TOP_K: !Ref KbTopK
+        KB_RELEVANCE_THRESHOLD: !Ref KbRelevanceThreshold
+        RERANKER_ENABLED: !Ref RerankerEnabled
       Tags:
         env: !Ref Environment
         application: !Ref Application

@@ -1012,10 +1012,16 @@ def test_property20_low_confidence_final_response_states_uncertainty(confidence)
 @settings(max_examples=30)
 def test_property21_citations_non_empty_when_kb_docs_used(docs):
     # Feature: feature-01-core-orchestrator, Property 21: ∀ final_response: citations list is non-empty when KB documents were used
+    # Req 8.5: aggregate_results reads citations from state["citations"] (populated by retrieve_knowledge)
     from langchain_core.documents import Document
     from src.orchestrator.nodes.aggregate_results import aggregate_results
     kb_docs = [
         Document(page_content=d["page_content"], metadata={"title": d["title"], "url": d["url"]})
+        for d in docs
+    ]
+    # Pre-build citations as retrieve_knowledge would
+    pre_built_citations = [
+        {"title": d["title"], "url": d["url"], "timestamp": "2024-01-01T00:00:00+00:00"}
         for d in docs
     ]
     state = {
@@ -1037,7 +1043,7 @@ def test_property21_citations_non_empty_when_kb_docs_used(docs):
         "session_id": "sess-pbt",
         "user_id": "user-pbt",
         "final_response": None,
-        "citations": [],
+        "citations": pre_built_citations,
         "error": None,
     }
     result = aggregate_results(state)

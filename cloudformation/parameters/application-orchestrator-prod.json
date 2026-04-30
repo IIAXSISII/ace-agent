@@ -7,5 +7,9 @@
   {"ParameterKey": "IdentityStackName", "ParameterValue": "ace-agent-foundation-identity-prod"},
   {"ParameterKey": "GuardrailsStackName", "ParameterValue": "ace-agent-platform-guardrails-prod"},
   {"ParameterKey": "MemoryStackName", "ParameterValue": "ace-agent-platform-memory-prod"},
-  {"ParameterKey": "GatewayStackName", "ParameterValue": "ace-agent-platform-gateway-prod"}
+  {"ParameterKey": "GatewayStackName", "ParameterValue": "ace-agent-platform-gateway-prod"},
+  {"ParameterKey": "KnowledgeStackName", "ParameterValue": "ace-agent-platform-knowledge-prod"},
+  {"ParameterKey": "KbTopK", "ParameterValue": "5"},
+  {"ParameterKey": "KbRelevanceThreshold", "ParameterValue": "0.5"},
+  {"ParameterKey": "RerankerEnabled", "ParameterValue": "true"}
 ]
