@@ -1,0 +1,4 @@
+# cfn-lint configuration
+# W3037: bedrock-agent-runtime is a valid IAM service prefix not yet in cfn-lint's registry
+ignore_checks:
+  - W3037

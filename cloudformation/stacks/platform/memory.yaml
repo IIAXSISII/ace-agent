@@ -37,15 +37,11 @@ Resources:
     Type: AWS::BedrockAgentCore::Memory
     Properties:
       # Name must match ^[a-zA-Z][a-zA-Z0-9_]{0,47}$ — no hyphens allowed.
-      # Environment values (local/staging/production) are alphanumeric, safe to embed directly.
       Name: !Sub "AceAgent_${Environment}_ShortTerm"
       Description: !Sub >
         ACE Agent short-term memory for ${Environment}.
-        Session-scoped multi-turn checkpointing via episodic strategy.
+        Session-scoped multi-turn checkpointing.
       EventExpiryDuration: 7
-      MemoryStrategies:
-        - EpisodicMemoryStrategy:
-            Name: ShortTermEpisodic
       Tags:
         env: !Ref Environment
         application: !Ref Application
@@ -64,11 +60,8 @@ Resources:
       Name: !Sub "AceAgent_${Environment}_LongTerm"
       Description: !Sub >
         ACE Agent long-term memory for ${Environment}.
-        Cross-session semantic retrieval via semantic strategy.
+        Cross-session semantic retrieval.
       EventExpiryDuration: 365
-      MemoryStrategies:
-        - SemanticMemoryStrategy:
-            Name: LongTermSemantic
       Tags:
         env: !Ref Environment
         application: !Ref Application

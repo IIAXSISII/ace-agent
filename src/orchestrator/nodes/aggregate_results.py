@@ -7,12 +7,12 @@ aggregate_results node — synthesizes a unified final response via LLM:
   5. Computes confidence_score (average of step result scores, or 0.5 if none)
   6. Prepends uncertainty notice when confidence < 0.8
   7. Prepends unverified notice when no live sub-agent data used
-  8. Builds citations list from context_window documents
+  8. Reads citations from OrchestratorState.citations (populated by retrieve_knowledge)
+  9. Prepends KB retrieval error diagnostic when state["error"] is set
 """
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -52,22 +52,8 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
         or hasattr(item, "metadata")  # LangChain Document
     ]
 
-    # ── Build citations ───────────────────────────────────────────────────────
-    now_iso = datetime.now(timezone.utc).isoformat()
-    citations = []
-    for doc in context_window:
-        if hasattr(doc, "metadata"):
-            meta = doc.metadata or {}
-            title = meta.get("title", "Unknown Source")
-            url = meta.get("url", "")
-            if url:
-                citations.append({"title": title, "url": url, "timestamp": now_iso})
-        elif isinstance(doc, dict) and doc.get("type") == "kb_document":
-            meta = doc.get("metadata", {})
-            title = meta.get("title", doc.get("title", "Unknown Source"))
-            url = meta.get("url", doc.get("url", ""))
-            if url:
-                citations.append({"title": title, "url": url, "timestamp": now_iso})
+    # ── Read citations populated by retrieve_knowledge ────────────────────────
+    citations = state.get("citations", [])
 
     # ── Build context summary for LLM ─────────────────────────────────────────
     step_summaries = []
@@ -88,7 +74,6 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
     # ── Cross-reference check ─────────────────────────────────────────────────
     contradiction_note = ""
     if has_live_data and kb_summaries:
-        # Simple heuristic: flag if KB and agent outputs are both present (cross-referenced)
         contradiction_note = "\n\n*Note: Response cross-referenced against retrieved documentation and live system data.*"
 
     # ── LLM call ──────────────────────────────────────────────────────────────
@@ -96,7 +81,6 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
     bedrock_model = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
     if use_mock or not os.getenv("AWS_PROFILE") and not os.getenv("AWS_ACCESS_KEY_ID"):
-        # Mock response for local testing without Bedrock
         agent_outputs_text = "\n".join(step_summaries) if step_summaries else "No sub-agent outputs."
         kb_text = "\n".join(kb_summaries) if kb_summaries else "No knowledge base documents."
         final_response = (
@@ -130,6 +114,16 @@ def aggregate_results(state: "OrchestratorState") -> "OrchestratorState":
         config = {"callbacks": [handler]} if handler else {}
         response = llm.invoke([system_msg, human_msg], config=config)
         final_response = response.content + contradiction_note
+
+    # ── KB retrieval error diagnostic ─────────────────────────────────────────
+    if state.get("error"):
+        err = state["error"]
+        diagnostic = (
+            f"⚠️ Knowledge retrieval failed ({err.get('type', 'unknown')}): "
+            f"{err.get('message', '')}. "
+            "The plan below may be less accurate — no KB context was available."
+        )
+        final_response = diagnostic + "\n\n" + final_response
 
     # ── Apply notices ─────────────────────────────────────────────────────────
     if not has_live_data:

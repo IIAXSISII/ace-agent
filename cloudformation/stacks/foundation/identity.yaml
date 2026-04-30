@@ -36,6 +36,13 @@ Parameters:
     Default: ace-agent
     Description: Application name used for tagging and resource naming
 
+  KnowledgeStackName:
+    Type: String
+    Default: ace-agent-platform-knowledge-prod
+    Description: >
+      Name of the deployed knowledge stack.
+      Used to scope bedrock-agent-runtime:Retrieve to the Knowledge Base ARN.
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Resources
@@ -202,6 +209,15 @@ Resources:
                   - kms:GenerateDataKey
                 Resource:
                   - !GetAtt OrchestratorKmsKey.Arn
+
+              # ── Bedrock Knowledge Base: retrieve documents ────────────────
+              # cfn-lint: disable=W3037 — bedrock-agent-runtime is valid but not yet in cfn-lint registry
+              - Sid: AllowKnowledgeBaseRetrieve
+                Effect: Allow
+                Action:
+                  - bedrock-agent-runtime:Retrieve
+                Resource:
+                  - Fn::ImportValue: !Sub "${KnowledgeStackName}-KnowledgeBaseArn"
       Tags:
         - Key: env
           Value: !Ref Environment

@@ -1,0 +1,359 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACE Agent — Platform Knowledge Stack.
+  Provisions the Bedrock Knowledge Base, KMS-encrypted S3 source bucket,
+  S3 Vectors index, Bedrock KB IAM service role, six per-type data sources,
+  and an SSM parameter for the Knowledge Base ID.
+  KnowledgeBaseId and KnowledgeBaseArn are exported for consumption by
+  identity.yaml (IAM scoping) and orchestrator.yaml (KNOWLEDGE_BASE_ID env var).
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - local
+      - dev
+      - prod
+    Description: Deployment environment
+
+  Application:
+    Type: String
+    Default: ace-agent
+    Description: Application name used for tagging and resource naming
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── KMS Key for S3 Source Bucket encryption ───────────────────────────────────
+  KnowledgeSourceBucketKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "KMS key for ${Application}-${Environment} knowledge source bucket"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRootAccountFullAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: AllowS3ServiceUse
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: application
+          Value: !Ref Application
+        - Key: created-with
+          Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  KnowledgeSourceBucketKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Application}-${Environment}-knowledge-source"
+      TargetKeyId: !Ref KnowledgeSourceBucketKmsKey
+
+  # ── S3 Source Bucket ──────────────────────────────────────────────────────────
+  KnowledgeSourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Application}-${Environment}-knowledge-source-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref KnowledgeSourceBucketKmsKey
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: application
+          Value: !Ref Application
+        - Key: created-with
+          Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── S3 Vectors Index ──────────────────────────────────────────────────────────
+  KnowledgeVectorsIndex:
+    Type: AWS::S3Vectors::VectorBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VectorBucketName: !Sub "${Application}-${Environment}-knowledge-vectors-${AWS::AccountId}"
+
+  # ── S3 Vectors Index (inside the bucket) ─────────────────────────────────────
+  # Bedrock KB requires a pre-existing index in the vector bucket.
+  # Titan Embeddings V2 produces 1024-dimensional float32 vectors.
+  KnowledgeVectorsKbIndex:
+    Type: AWS::S3Vectors::Index
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      IndexName: !Sub "${Application}-${Environment}-kb-index"
+      VectorBucketArn: !GetAtt KnowledgeVectorsIndex.VectorBucketArn
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+
+  # ── Bedrock KB IAM Service Role ───────────────────────────────────────────────
+  BedrockKbServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Application}-${Environment}-bedrock-kb-service-role"
+      Description: >
+        IAM role for the Bedrock Knowledge Base service.
+        Grants minimum permissions to read from S3 source bucket,
+        write to S3 Vectors index, and use the KMS key.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowBedrockKbAssumption
+            Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockKbPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowS3SourceBucketRead
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt KnowledgeSourceBucket.Arn
+                  - !Sub "${KnowledgeSourceBucket.Arn}/*"
+              - Sid: AllowBedrockEmbeddingModel
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
+              - Sid: AllowS3VectorsAccess
+                Effect: Allow
+                Action:
+                  - s3vectors:*
+                Resource:
+                  - !GetAtt KnowledgeVectorsIndex.VectorBucketArn
+                  - !Ref KnowledgeVectorsKbIndex
+              - Sid: AllowKmsKeyUse
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt KnowledgeSourceBucketKmsKey.Arn
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+        - Key: application
+          Value: !Ref Application
+        - Key: created-with
+          Value: CloudFormation
+        - Key: owners
+          Value: cloud-engineering
+        - Key: Stack
+          Value: !Ref AWS::StackName
+
+  # ── Bedrock Knowledge Base ────────────────────────────────────────────────────
+  KnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${Application}-${Environment}-knowledge-base"
+      Description: !Sub >
+        ACE Agent Knowledge Base for ${Environment}.
+        Backed by S3 Vectors with Titan Embeddings V2.
+      RoleArn: !GetAtt BedrockKbServiceRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          VectorBucketArn: !GetAtt KnowledgeVectorsIndex.VectorBucketArn
+          IndexArn: !Ref KnowledgeVectorsKbIndex
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+        Stack: !Ref AWS::StackName
+
+  # ── Data Sources — one per document type ─────────────────────────────────────
+
+  DataSourceConfluence:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${Application}-${Environment}-ds-confluence"
+      Description: Confluence pages — HIERARCHICAL chunking
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeSourceBucket.Arn
+          InclusionPrefixes:
+            - confluence/
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: HIERARCHICAL
+          HierarchicalChunkingConfiguration:
+            LevelConfigurations:
+              - MaxTokens: 1500
+              - MaxTokens: 300
+            OverlapTokens: 60
+
+  DataSourceIaC:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${Application}-${Environment}-ds-iac"
+      Description: IaC files (Terraform, CloudFormation) — FIXED_SIZE 512/64
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeSourceBucket.Arn
+          InclusionPrefixes:
+            - iac/
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 512
+            OverlapPercentage: 12
+
+  DataSourceCode:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${Application}-${Environment}-ds-code"
+      Description: Code files (Python, etc.) — FIXED_SIZE 512/64
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeSourceBucket.Arn
+          InclusionPrefixes:
+            - code/
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 512
+            OverlapPercentage: 12
+
+  DataSourceReadme:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${Application}-${Environment}-ds-readme"
+      Description: README and documentation files — HIERARCHICAL chunking
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeSourceBucket.Arn
+          InclusionPrefixes:
+            - readme/
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: HIERARCHICAL
+          HierarchicalChunkingConfiguration:
+            LevelConfigurations:
+              - MaxTokens: 1500
+              - MaxTokens: 300
+            OverlapTokens: 60
+
+  DataSourceIncidents:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${Application}-${Environment}-ds-incidents"
+      Description: Incident records — FIXED_SIZE 256/32
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeSourceBucket.Arn
+          InclusionPrefixes:
+            - incidents/
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 256
+            OverlapPercentage: 12
+
+  # NOTE: Bedrock KB limit is 5 data sources per KB.
+  # DataSourceDefault removed — place miscellaneous docs in any of the above prefixes.
+  # The 5 sources cover: Confluence, IaC, Code, README/docs, Incidents.
+
+  # ── SSM Parameter ─────────────────────────────────────────────────────────────
+  KnowledgeBaseIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Application}/${Environment}/knowledge/knowledge-base-id"
+      Type: String
+      Value: !GetAtt KnowledgeBase.KnowledgeBaseId
+      Description: Bedrock Knowledge Base ID for the ACE Agent RAG pipeline
+      Tags:
+        env: !Ref Environment
+        application: !Ref Application
+        created-with: CloudFormation
+        owners: cloud-engineering
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  KnowledgeBaseId:
+    Description: >
+      Bedrock Knowledge Base ID — imported by orchestrator.yaml as KNOWLEDGE_BASE_ID
+    Value: !GetAtt KnowledgeBase.KnowledgeBaseId
+    Export:
+      Name: !Sub "${AWS::StackName}-KnowledgeBaseId"
+
+  KnowledgeBaseArn:
+    Description: >
+      Bedrock Knowledge Base ARN — imported by identity.yaml to scope
+      bedrock-agent-runtime:Retrieve IAM permission
+    Value: !GetAtt KnowledgeBase.KnowledgeBaseArn
+    Export:
+      Name: !Sub "${AWS::StackName}-KnowledgeBaseArn"
+
+  KnowledgeSourceBucketKmsKeyArn:
+    Description: >
+      KMS key ARN for the knowledge source bucket — for audit and cross-stack KMS grants
+    Value: !GetAtt KnowledgeSourceBucketKmsKey.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-KnowledgeSourceBucketKmsKeyArn"

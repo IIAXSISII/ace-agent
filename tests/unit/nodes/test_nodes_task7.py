@@ -355,6 +355,7 @@ class TestAggregateResults:
         assert result["confidence_score"] == pytest.approx(0.5)
 
     def test_builds_citations_from_kb_documents(self):
+        # Req 8.5: aggregate_results reads citations from state["citations"] (populated by retrieve_knowledge)
         from src.orchestrator.nodes.aggregate_results import aggregate_results
         from langchain_core.documents import Document
 
@@ -362,7 +363,8 @@ class TestAggregateResults:
             page_content="some content",
             metadata={"title": "Runbook A", "url": "https://wiki.example.com/runbook-a"},
         )
-        state = _base_state(context_window=[doc])
+        pre_built_citations = [{"title": "Runbook A", "url": "https://wiki.example.com/runbook-a", "timestamp": "2024-01-01T00:00:00+00:00"}]
+        state = _base_state(context_window=[doc], citations=pre_built_citations)
         result = aggregate_results(state)
         assert len(result["citations"]) == 1
         assert result["citations"][0]["title"] == "Runbook A"
@@ -370,7 +372,7 @@ class TestAggregateResults:
 
     def test_citations_empty_when_no_kb_docs(self):
         from src.orchestrator.nodes.aggregate_results import aggregate_results
-        state = _base_state(context_window=[])
+        state = _base_state(context_window=[], citations=[])
         result = aggregate_results(state)
         assert result["citations"] == []
 

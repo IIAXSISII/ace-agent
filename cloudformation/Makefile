@@ -143,10 +143,11 @@ deploy-foundation:
 # ──────────────────────────────────────────────────────────────────────────────
 .PHONY: deploy-platform
 deploy-platform:
-	$(call lint-templates,$(STACKS_DIR)/platform/guardrails.yaml $(STACKS_DIR)/platform/memory.yaml $(STACKS_DIR)/platform/gateway.yaml)
+	$(call lint-templates,$(STACKS_DIR)/platform/guardrails.yaml $(STACKS_DIR)/platform/memory.yaml $(STACKS_DIR)/platform/gateway.yaml $(STACKS_DIR)/platform/knowledge.yaml)
 	$(call deploy-stack,$(call stack-name,platform,guardrails),$(STACKS_DIR)/platform/guardrails.yaml,$(call params-file,platform,guardrails))
 	$(call deploy-stack,$(call stack-name,platform,memory),$(STACKS_DIR)/platform/memory.yaml,$(call params-file,platform,memory))
 	$(call deploy-stack,$(call stack-name,platform,gateway),$(STACKS_DIR)/platform/gateway.yaml,$(call params-file,platform,gateway))
+	$(call deploy-stack,$(call stack-name,platform,knowledge),$(STACKS_DIR)/platform/knowledge.yaml,$(call params-file,platform,knowledge))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # deploy-agents
